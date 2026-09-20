@@ -1,0 +1,20 @@
+# deps
+node_modules/
+
+# next
+.next/
+out/
+
+# local runtime data (file-store DB + generated cards) — never commit
+.data/
+
+# env
+.env*.local
+.env
+
+# logs / coverage
+*.log
+coverage/
+
+# OS
+.DS_Store

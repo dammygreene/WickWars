@@ -1,0 +1,131 @@
+import type { DbShape } from '@/lib/store/db';
+import { emptyStats } from '@/lib/store/db';
+import type { Game, GameResult, MarketScenario, ResultState } from '@/lib/types';
+import { calculateScore } from './scoring';
+import { closingEvent, computeFinalStats } from './engine';
+import { levelForGames, titleForGames, archetypeForStats } from '@/lib/auth/identity';
+
+/**
+ * Authoritative finalization. Runs INSIDE the store write-lock with direct db
+ * access (never call save* helpers from here — they would deadlock).
+ */
+export function finalizeLocked(
+  db: DbShape,
+  game: Game,
+  scenario: MarketScenario,
+  endT: number,
+  liquidated: boolean,
+): GameResult {
+  if (game.resultId && db.results[game.resultId]) return db.results[game.resultId];
+
+  const endCapped = Math.min(Math.max(0, endT), scenario.durationMs);
+  const closeEv = closingEvent(game, scenario, endCapped, liquidated ? 'LIQUIDATION_CLOSE' : 'TIMEOUT_CLOSE');
+  if (closeEv) game.trades.push(closeEv);
+
+  const stats = computeFinalStats(
+    { ...game, trades: closeEv ? game.trades.slice(0, -1) : game.trades },
+    scenario,
+    { liquidated, endT: endCapped },
+  );
+
+  const ps = db.stats[game.playerId] ?? emptyStats(game.createdAt);
+  const profitable = stats.pnl > 0;
+  const prevBest = ps.bestScore;
+  const { total: score } = calculateScore({
+    startBalance: game.startBalance,
+    pnl: stats.pnl,
+    closedTrades: stats.closedTrades,
+    wins: stats.wins,
+    maxDrawdownPct: stats.maxDrawdownPct,
+    liquidated,
+    streakBefore: ps.currentStreak,
+    profitable,
+  });
+
+  // Rank among verified challenge results (this run included).
+  const board = Object.values(db.results).filter((r) => r.challengeId === game.challengeId && r.verified);
+  const rank = 1 + board.filter((r) => r.score > score).length;
+  const rankTotal = board.length + 1;
+
+  let resultState: ResultState = profitable ? 'PROFITABLE' : 'WICKED';
+  const isPersonalBest = ps.games > 0 && score > prevBest;
+  if (rank === 1 && rankTotal >= 3 && score >= 1500) resultState = 'LEGENDARY';
+  else if (rank <= 10 && rankTotal >= 10) resultState = 'TOP_10';
+  else if (isPersonalBest) resultState = 'PERSONAL_BEST';
+
+  const result: GameResult = {
+    gameId: game.id,
+    playerId: game.playerId,
+    scenarioId: game.scenarioId,
+    challengeId: game.challengeId,
+    seasonId: game.seasonId,
+    mode: game.mode,
+    pair: game.pair,
+    startBalance: game.startBalance,
+    endBalance: stats.endBalance,
+    pnl: stats.pnl,
+    roi: stats.roi,
+    trades: stats.closedTrades,
+    tradeEvents: game.trades.length,
+    wins: stats.wins,
+    losses: stats.losses,
+    winRate: stats.winRate,
+    holdTimeMs: stats.holdTimeMs,
+    maxDrawdownPct: stats.maxDrawdownPct,
+    score,
+    rank,
+    rankTotal,
+    percentile: rankTotal ? (rank / rankTotal) * 100 : 100,
+    durationMs: endCapped,
+    resultState,
+    liquidated,
+    verified: true,
+    createdAt: Date.now(),
+  };
+
+  // Persist result + game
+  db.results[result.gameId] = result;
+  game.status = liquidated ? 'LIQUIDATED' : 'FINISHED';
+  game.resultId = result.gameId;
+  db.games[game.id] = game;
+
+  // Player stats + identity progression
+  ps.games += 1;
+  if (profitable) {
+    ps.wins += 1;
+    ps.currentStreak += 1;
+    ps.longestStreak = Math.max(ps.longestStreak, ps.currentStreak);
+  } else {
+    ps.currentStreak = 0;
+  }
+  ps.totalPnl += stats.pnl;
+  ps.bestScore = Math.max(ps.bestScore, score);
+  if (stats.roi > ps.bestWinPct) {
+    ps.bestWinPct = stats.roi;
+    ps.bestGameId = game.id;
+  }
+  ps.peakRank = ps.peakRank == null ? rank : Math.min(ps.peakRank, rank);
+  if (!ps.seasonsPlayed.includes(game.seasonId)) ps.seasonsPlayed.push(game.seasonId);
+  ps.lastPlayedAt = result.createdAt;
+  ps.totalHoldMs += stats.holdTimeMs;
+  ps.totalTrades += stats.closedTrades;
+  for (const t of game.trades) {
+    if (t.kind === 'OPEN') {
+      if (t.action === 'LONG') ps.longCount++;
+      if (t.action === 'SHORT') ps.shortCount++;
+    }
+  }
+  ps.history.push({ gameId: game.id, score, roi: stats.roi, at: result.createdAt, seasonId: game.seasonId });
+  if (ps.history.length > 200) ps.history = ps.history.slice(-200);
+  db.stats[game.playerId] = ps;
+
+  const p = db.players[game.playerId];
+  if (p) {
+    p.title = titleForGames(ps.games);
+    p.archetype = archetypeForStats(ps);
+    p.level = levelForGames(ps.games);
+    db.players[game.playerId] = p;
+  }
+
+  return result;
+}

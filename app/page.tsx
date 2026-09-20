@@ -9,6 +9,7 @@ import { LeaderboardPreview } from '@/components/landing/LeaderboardPreview';
 import { Button } from '@/components/ui/Button';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { usePlayer } from '@/lib/client/usePlayer';
+import { useSeason } from '@/lib/client/useSeason';
 import { track } from '@/lib/client/analytics';
 
 const fadeUp = {
@@ -20,6 +21,7 @@ const fadeUp = {
 
 export default function Landing() {
   const { player } = usePlayer();
+  const { season } = useSeason();
   const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export default function Landing() {
             <div className="flex items-center gap-2.5">
               <span className="live-dot inline-block h-2 w-2 rounded-full bg-ww-win" aria-hidden />
               <p className="ww-mono text-xs font-semibold tracking-[0.18em] text-ww-secondary">
-                SEASON 01 · DAILY WICK · LIVE
+                {season ? `${season.id} · DAILY WICK · LIVE` : 'DAILY WICK · LIVE'}
               </p>
             </div>
             <h1 className="mt-4 font-display text-[44px] font-bold leading-[1.02] tracking-tight text-ww-text sm:text-6xl lg:text-[68px]">

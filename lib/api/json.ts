@@ -4,8 +4,8 @@ export function ok<T>(data: T, init?: ResponseInit): NextResponse {
   return NextResponse.json({ ok: true, data }, init);
 }
 
-export function fail(code: string, message: string, status = 400): NextResponse {
-  return NextResponse.json({ ok: false, error: { code, message } }, { status });
+export function fail(code: string, message: string, status = 400, headers?: Record<string, string>): NextResponse {
+  return NextResponse.json({ ok: false, error: { code, message } }, { status, headers });
 }
 
 /** Friendly messages for known error codes (never leak internals). */
@@ -30,6 +30,9 @@ export function failFrom(e: unknown): NextResponse {
       X_AUTH_FAILED: ['X authentication failed. Try again.', 502],
       WALLET_INVALID: ['Wallet signature invalid.', 401],
       CARD_NOT_FOUND: ['Card not found.', 404],
+      CHALLENGE_NOT_LIVE: ["Today's wick isn't live — new rounds drop at 00:00 UTC.", 409],
+      GAME_ALREADY_LIVE: ['Finish your live run first.', 409],
+      RATE_LIMITED: ['Slow down — too many requests.', 429],
     };
     const hit = map[code];
     if (hit) return fail(code, hit[0], hit[1]);

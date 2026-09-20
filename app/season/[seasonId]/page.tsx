@@ -5,21 +5,23 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/client/api';
 import { track } from '@/lib/client/analytics';
+import { useSeason } from '@/lib/client/useSeason';
 import { Avatar } from '@/components/ui/Avatar';
 import { CountdownChip } from '@/components/ui/Countdown';
 import { LoadingState, EmptyState } from '@/components/ui/States';
-import { seasonConfig, todayChallenge } from '@/lib/game/challenge';
 import { cn } from '@/lib/utils';
 import type { LeaderboardRow } from '@/lib/types';
 
 export default function SeasonPage() {
   const { seasonId } = useParams<{ seasonId: string }>();
-  const season = seasonConfig();
-  const id = seasonId === 'current' ? season.id : seasonId.toUpperCase();
-  const known = id === season.id;
+  // Season metadata comes from the server (env-configured); reading it via
+  // seasonConfig() in a client component would silently use bundle defaults.
+  const { season, challenge } = useSeason();
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [myRank, setMyRank] = useState<number | null>(null);
-  const challenge = todayChallenge();
+
+  const id = season ? (seasonId === 'current' ? season.id : seasonId.toUpperCase()) : null;
+  const known = !!season && !!id && id.toUpperCase() === season.id.toUpperCase();
 
   useEffect(() => {
     if (!known) return;
@@ -31,6 +33,14 @@ export default function SeasonPage() {
       .catch(() => setRows([]));
     track('season_viewed');
   }, [known]);
+
+  if (!season) {
+    return (
+      <div className="ww-container max-w-3xl py-12">
+        <LoadingState label="LOADING SEASON" />
+      </div>
+    );
+  }
 
   if (!known) {
     return (
@@ -131,9 +141,11 @@ export default function SeasonPage() {
           SCORING RULES
         </Link>
       </div>
-      <p className="ww-mono mt-4 text-center text-xs text-ww-disabled">
-        DAILY RESET {new Date(challenge.endsAt).toISOString().slice(11, 16)} UTC · {challenge.pair} · {challenge.leverage}x
-      </p>
+      {challenge && (
+        <p className="ww-mono mt-4 text-center text-xs text-ww-disabled">
+          DAILY RESET {new Date(challenge.endsAt).toISOString().slice(11, 16)} UTC · {challenge.pair} · {challenge.leverage}x
+        </p>
+      )}
     </div>
   );
 }

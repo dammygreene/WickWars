@@ -3,11 +3,19 @@ import { setSessionCookie, currentPlayer } from '@/lib/auth/session';
 import { createGuest } from '@/lib/auth/identity';
 import { trackEvent } from '@/lib/store/db';
 import { ok, fail, failFrom } from '@/lib/api/json';
+import { rateLimit, clientKey } from '@/lib/api/ratelimit';
 
 const Body = z.object({ username: z.string().trim().max(20).optional() });
 
 export async function POST(req: Request) {
   try {
+    // Cap new-account creation per client (player records live forever in the store).
+    const rl = rateLimit(`guest:${clientKey(req)}`, 6, 10 * 60_000);
+    if (!rl.ok) {
+      return fail('RATE_LIMITED', 'Too many attempts — try again in a few minutes.', 429, {
+        'Retry-After': String(rl.retryAfterS),
+      });
+    }
     const existing = await currentPlayer();
     if (existing) return ok({ player: existing, fresh: false });
     const body = Body.parse(await req.json().catch(() => ({})));

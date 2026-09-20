@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { api } from '@/lib/client/api';
 import { track } from '@/lib/client/analytics';
+import { useSeason } from '@/lib/client/useSeason';
 import { Avatar } from '@/components/ui/Avatar';
 import { LoadingState, EmptyState } from '@/components/ui/States';
 import { cn } from '@/lib/utils';
@@ -21,6 +22,7 @@ const SCOPES: Array<{ id: Scope; label: string }> = [
 function Board() {
   const search = useSearchParams();
   const router = useRouter();
+  const { season } = useSeason();
   const scope = (search.get('scope') as Scope) || 'daily';
   const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
   const [myRank, setMyRank] = useState<number | null>(null);

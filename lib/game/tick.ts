@@ -131,6 +131,11 @@ function liveSnapshot(db: DbShape, game: Game, scenario: MarketScenario, t: numb
   };
 }
 
+/** Read-only finished snapshot (no db access) for already-finalized runs. */
+export function finishedTick(game: Game, result: GameResult): TickSnapshot {
+  return finishedSnapshot(game, scenarioForGame(game), result, Date.now());
+}
+
 function finishedSnapshot(game: Game, scenario: MarketScenario, r: GameResult, now: number): TickSnapshot {
   void game;
   return {

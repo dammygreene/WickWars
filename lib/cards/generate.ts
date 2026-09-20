@@ -83,6 +83,26 @@ export async function gameResultCard(gameId: string): Promise<{ cardId: string; 
 
   let svg = await loadTemplate('game-result-template.svg');
 
+  // Template rebalance (layout-only redistribution, not a redesign): the
+  // stock layout parks the FINAL SCORE row at y=990 while the main panel runs
+  // to y=1290, stranding ~250px of dead space in the lower third. Reclaim it:
+  // grow the PnL panel (+26 so the hero number breathes), open the ROI line
+  // off the PnL descenders, and seat the score row in a divided footer zone
+  // roughly centered in the remaining band. Rhythm and styling unchanged.
+  svg = svg
+    .split('<rect x="96" y="616" width="1008" height="330"')
+    .join('<rect x="96" y="616" width="1008" height="356"');
+  svg = svg
+    .split('<text x="0" y="154" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="24"')
+    .join('<text x="0" y="162" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="24"');
+  svg = svg
+    .split('<line x1="0" y1="166" x2="944" y2="166"')
+    .join('<line x1="0" y1="176" x2="944" y2="176"');
+  svg = svg.split('<g transform="translate(0,194)"').join('<g transform="translate(0,208)"');
+  svg = svg.split('<g transform="translate(96,990)"').join(
+    '<line x1="96" y1="1048" x2="1104" y2="1048" stroke="#20242B" stroke-width="1" opacity="0.9"/>\n<g transform="translate(96,1150)"',
+  );
+
   // 1. Avatar (before token replacement so the fallback path stays intact)
   const avatarUri = await fetchAvatarDataUri(player.avatarUrl);
   svg = embedAvatar(svg, GAME_AVATAR, avatarUri);

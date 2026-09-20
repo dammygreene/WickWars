@@ -4,12 +4,18 @@ import { mutateGame, trackEvent } from '@/lib/store/db';
 import { applyTrade, TradeRejected } from '@/lib/game/engine';
 import { computeTick, scenarioForGame } from '@/lib/game/tick';
 import { ok, fail, failFrom } from '@/lib/api/json';
+import { rateLimit } from '@/lib/api/ratelimit';
 
 const Body = z.object({ action: z.enum(['LONG', 'SHORT', 'CLOSE']) });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const me = await requirePlayer();
+    // Generous ceiling (~4 clicks/s sustained) — only blunts scripted spam.
+    const rl = rateLimit(`trade:${me.playerId}`, 240, 60_000);
+    if (!rl.ok) {
+      return fail('RATE_LIMITED', 'Too many trades too fast.', 429, { 'Retry-After': String(rl.retryAfterS) });
+    }
     const { action } = Body.parse(await req.json());
     type Out =
       | { kind: 'game_not_found' }

@@ -156,6 +156,27 @@ export async function getGame(id: string): Promise<Game | null> {
   return db.games[id] ?? null;
 }
 
+/** Read-only db access for pure computations (no writes, no lock). */
+export async function withDb<T>(fn: (db: DbShape) => T): Promise<T> {
+  const db = await readDb();
+  return fn(db);
+}
+
+/**
+ * A player's still-active unfinished game (result pending and its window has
+ * not long expired). Games whose window ended more than `graceMs` ago are
+ * considered abandoned orphans and never block a fresh start.
+ */
+export async function findActiveGame(playerId: string, graceMs = 120_000): Promise<Game | null> {
+  const db = await readDb();
+  const now = Date.now();
+  return (
+    Object.values(db.games).find(
+      (g) => g.playerId === playerId && !g.resultId && g.endsAt > now - graceMs,
+    ) ?? null
+  );
+}
+
 /** Atomic trade append + finish. The mutation fn runs inside the write lock. */
 export async function mutateGame<T>(id: string, fn: (g: Game | null, db: DbShape) => Promise<T> | T): Promise<T> {
   return withLock(async () => {

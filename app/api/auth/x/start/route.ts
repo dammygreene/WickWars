@@ -8,8 +8,9 @@ export async function GET() {
   const state = newState();
   const verifier = newCodeVerifier();
   const secure = process.env.NODE_ENV === 'production';
-  cookies().set('ww_x_state', state, { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: 600 });
-  cookies().set('ww_x_verifier', verifier, { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: 600 });
+  const jar = await cookies();
+  jar.set('ww_x_state', state, { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: 600 });
+  jar.set('ww_x_verifier', verifier, { httpOnly: true, sameSite: 'lax', secure, path: '/', maxAge: 600 });
   await trackEvent('auth_started', { method: 1 });
   return Response.redirect(xAuthUrl(state, challengeFor(verifier)), 302);
 }

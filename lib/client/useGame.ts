@@ -6,6 +6,7 @@ import { track } from './analytics';
 import type { TickSnapshot } from '@/lib/game/tick';
 import type { TradeAction } from '@/lib/types';
 import { sfx } from './sound';
+import type { FeedbackEvent } from '@/components/game/GameFeedbackLayer';
 
 export type Phase = 'brief' | 'countdown' | 'live' | 'over';
 
@@ -34,6 +35,7 @@ interface UseGame {
   start: () => Promise<void>;
   trade: (a: TradeAction) => Promise<void>;
   retry: () => void;
+  feedback: FeedbackEvent | null;
 }
 
 export function useGame(): UseGame {
@@ -45,13 +47,22 @@ export function useGame(): UseGame {
   const [offline, setOffline] = useState(false);
   const [trading, setTrading] = useState(false);
   const [countdown, setCountdown] = useState('3');
+  const [feedback, setFeedback] = useState<FeedbackEvent | null>(null);
 
   const pollRef = useRef<number | null>(null);
   const failsRef = useRef(0);
   const prevEquityRef = useRef<number | null>(null);
+  const prevPnlRef = useRef<number | null>(null);
+  const lastImpactAtRef = useRef(0);
+  const feedbackIdRef = useRef(0);
   const overRef = useRef(false);
   const phaseRef = useRef<Phase>('brief');
   phaseRef.current = phase;
+
+  const emitFeedback = useCallback((type: FeedbackEvent['type']) => {
+    feedbackIdRef.current += 1;
+    setFeedback({ id: feedbackIdRef.current, type });
+  }, []);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current) {
@@ -68,6 +79,20 @@ export function useGame(): UseGame {
         setOffline(false);
         setClockSkew(t.serverNow - Date.now());
 
+        if (
+          phaseRef.current === 'live' &&
+          t.side !== 'FLAT' &&
+          prevPnlRef.current != null &&
+          t.pnl - prevPnlRef.current < -25 &&
+          t.t - lastImpactAtRef.current > 700
+        ) {
+          lastImpactAtRef.current = t.t;
+          emitFeedback('impact');
+          sfx.impact();
+          vibrate([18, 28, 18]);
+        }
+        prevPnlRef.current = t.pnl;
+
         // Close feedback: equity delta across a close.
         if (prevEquityRef.current != null && prevEquityRef.current !== t.equity && t.side === 'FLAT') {
           const d = t.equity - prevEquityRef.current;
@@ -83,6 +108,7 @@ export function useGame(): UseGame {
           if (!overRef.current) {
             overRef.current = true;
             if (t.status === 'LIQUIDATED') {
+              emitFeedback('liquidated');
               sfx.rekt();
               vibrate([40, 60, 80]);
             } else {
@@ -105,7 +131,7 @@ export function useGame(): UseGame {
         if (failsRef.current >= 3) setOffline(true);
       }
     },
-    [stopPoll],
+    [emitFeedback, stopPoll],
   );
 
   const start = useCallback(async () => {
@@ -118,6 +144,8 @@ export function useGame(): UseGame {
       setGame(g);
       setClockSkew(serverNow - Date.now());
       prevEquityRef.current = g.startBalance;
+      prevPnlRef.current = 0;
+      lastImpactAtRef.current = 0;
       overRef.current = false;
       setPhase('countdown');
       track('game_started');
@@ -140,8 +168,12 @@ export function useGame(): UseGame {
           body: JSON.stringify({ action }),
         });
         if (action !== 'CLOSE') {
+          emitFeedback('entry');
           sfx.open();
           vibrate(10);
+        } else if (t.side === 'FLAT') {
+          const delta = t.equity - (prevEquityRef.current ?? t.equity);
+          emitFeedback(delta >= 0 ? 'close-win' : 'close-loss');
         }
         failsRef.current = 0;
         setOffline(false);
@@ -162,7 +194,7 @@ export function useGame(): UseGame {
         setTrading(false);
       }
     },
-    [game, trading, stopPoll],
+    [emitFeedback, game, trading, stopPoll],
   );
 
   const retry = useCallback(() => {
@@ -203,7 +235,7 @@ export function useGame(): UseGame {
 
   useEffect(() => stopPoll, [stopPoll]);
 
-  return { phase, game, tick, clockSkew, error, offline, trading, countdown, start, trade, retry };
+  return { phase, game, tick, clockSkew, error, offline, trading, countdown, start, trade, retry, feedback };
 }
 
 function vibrate(pattern: number | number[]): void {

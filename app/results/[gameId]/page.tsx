@@ -3,10 +3,11 @@ import { getGame, getPlayer, getResult } from '@/lib/store/db';
 import { ResultView } from '@/components/results/ResultView';
 import { fmtPct } from '@/lib/utils';
 
-export async function generateMetadata({ params }: { params: { gameId: string } }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ gameId: string }> }): Promise<Metadata> {
   const base = process.env.WW_BASE_URL || 'http://localhost:3000';
+  const { gameId } = await params;
   try {
-    const [game, result] = await Promise.all([getGame(params.gameId), getResult(params.gameId)]);
+    const [game, result] = await Promise.all([getGame(gameId), getResult(gameId)]);
     if (!game || !result) return { title: 'Result' };
     const player = await getPlayer(game.playerId);
     const won = result.pnl >= 0;
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: { params: { gameId: string } 
     return {
       title: `Run by @${player?.username ?? 'ghost'}`,
       description: desc,
-      openGraph: { title, description: desc, url: `${base}/results/${params.gameId}`, type: 'article' },
+      openGraph: { title, description: desc, url: `${base}/results/${gameId}`, type: 'article' },
       twitter: { card: 'summary', title, description: desc },
     };
   } catch {
@@ -23,6 +24,7 @@ export async function generateMetadata({ params }: { params: { gameId: string } 
   }
 }
 
-export default function ResultPage({ params }: { params: { gameId: string } }) {
-  return <ResultView gameId={params.gameId} />;
+export default async function ResultPage({ params }: { params: Promise<{ gameId: string }> }) {
+  const { gameId } = await params;
+  return <ResultView gameId={gameId} />;
 }

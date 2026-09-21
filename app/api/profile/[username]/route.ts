@@ -3,9 +3,10 @@ import { refreshIdentity } from '@/lib/auth/identity';
 import type { PublicPlayer } from '@/lib/types';
 import { ok, fail, failFrom } from '@/lib/api/json';
 
-export async function GET(_req: Request, { params }: { params: { username: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ username: string }> }) {
   try {
-    const handle = decodeURIComponent(params.username).replace(/^@/, '');
+    const { username } = await params;
+    const handle = decodeURIComponent(username).replace(/^@/, '');
     let player = await getPlayerByUsername(handle);
     if (!player) return fail('PLAYER_NOT_FOUND', 'Player not found.', 404);
     player = await refreshIdentity(player);

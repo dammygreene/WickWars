@@ -1,17 +1,23 @@
 import { NextResponse } from 'next/server';
+import { logError, logEvent } from '@/lib/server/log';
 
 export function ok<T>(data: T, init?: ResponseInit): NextResponse {
   return NextResponse.json({ ok: true, data }, init);
 }
 
 export function fail(code: string, message: string, status = 400, headers?: Record<string, string>): NextResponse {
+  logEvent('request_rejected', { code, status });
   return NextResponse.json({ ok: false, error: { code, message } }, { status, headers });
 }
 
 /** Friendly messages for known error codes (never leak internals). */
 export function failFrom(e: unknown): NextResponse {
-  if (e && typeof e === 'object' && 'code' in e) {
-    const { code } = e as { code: string };
+  const code = e && typeof e === 'object' && 'code' in e
+    ? (e as { code: string }).code
+    : e instanceof Error && /^[A-Z_]+$/.test(e.message)
+      ? e.message
+      : null;
+  if (code) {
     const map: Record<string, [string, number]> = {
       NOT_AUTHENTICATED: ['Connect to continue.', 401],
       GAME_NOT_FOUND: ['Game not found.', 404],
@@ -38,6 +44,6 @@ export function failFrom(e: unknown): NextResponse {
     if (hit) return fail(code, hit[0], hit[1]);
     return fail(code, 'Something went wrong.', 400);
   }
-  console.error('[api]', e);
+  logError('request_failed', e);
   return fail('INTERNAL', 'Something went wrong.', 500);
 }

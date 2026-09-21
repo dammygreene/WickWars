@@ -2,11 +2,12 @@ import { getGame, getResult, getPlayer } from '@/lib/store/db';
 import { ok, fail, failFrom } from '@/lib/api/json';
 
 /** Public result payload (post-game; powers /results + social unfurls). */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const game = await getGame(params.id);
+    const { id } = await params;
+    const game = await getGame(id);
     if (!game) return fail('GAME_NOT_FOUND', 'Game not found.', 404);
-    const result = await getResult(params.id);
+    const result = await getResult(id);
     if (!result) return fail('RESULT_NOT_FOUND', 'Result not ready yet.', 404);
     const player = await getPlayer(game.playerId);
     return ok({

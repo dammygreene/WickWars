@@ -5,11 +5,13 @@ import { applyTrade, TradeRejected } from '@/lib/game/engine';
 import { computeTick, scenarioForGame } from '@/lib/game/tick';
 import { ok, fail, failFrom } from '@/lib/api/json';
 import { rateLimit } from '@/lib/api/ratelimit';
+import { logEvent } from '@/lib/server/log';
 
 const Body = z.object({ action: z.enum(['LONG', 'SHORT', 'CLOSE']) });
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const me = await requirePlayer();
     // Generous ceiling (~4 clicks/s sustained) — only blunts scripted spam.
     const rl = rateLimit(`trade:${me.playerId}`, 240, 60_000);
@@ -23,7 +25,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       | { kind: 'finished' }
       | { kind: 'rejected'; code: string; message: string }
       | { kind: 'ok'; tick: ReturnType<typeof computeTick> };
-    const out: Out = await mutateGame(params.id, async (game, db) => {
+    const out: Out = await mutateGame(id, async (game, db) => {
       if (!game) return { kind: 'game_not_found' } as Out;
       if (game.playerId !== me.playerId) return { kind: 'forbidden' } as Out;
       if (game.resultId) return { kind: 'finished' } as Out;
@@ -42,7 +44,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       const tick = computeTick(db, game, Date.now(), true);
       return { kind: 'ok', tick } as Out;
     });
-    if (out.kind === 'rejected') return fail(out.code, out.message, 422);
+    if (out.kind === 'rejected') {
+      logEvent('invalid_trade', { gameId: id, playerId: me.playerId, code: out.code });
+      return fail(out.code, out.message, 422);
+    }
     if (out.kind === 'game_not_found') return fail('GAME_NOT_FOUND', 'Game not found.', 404);
     if (out.kind === 'forbidden') return fail('FORBIDDEN', 'Not your game.', 403);
     if (out.kind === 'finished') return fail('ALREADY_FINISHED', 'Game already finished.', 409);

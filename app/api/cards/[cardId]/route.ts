@@ -1,9 +1,10 @@
 import { getCard, getPlayer, getResult, getGame } from '@/lib/store/db';
 import { ok, fail, failFrom } from '@/lib/api/json';
 
-export async function GET(_req: Request, { params }: { params: { cardId: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ cardId: string }> }) {
   try {
-    const card = await getCard(params.cardId);
+    const { cardId } = await params;
+    const card = await getCard(cardId);
     if (!card) return fail('CARD_NOT_FOUND', 'Card not found.', 404);
     const player = await getPlayer(card.playerId);
     const game = card.gameId ? await getGame(card.gameId) : null;

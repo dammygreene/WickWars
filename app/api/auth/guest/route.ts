@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     if (existing) return ok({ player: existing, fresh: false });
     const body = Body.parse(await req.json().catch(() => ({})));
     const player = await createGuest(body.username || undefined);
-    setSessionCookie(player.playerId);
+    await setSessionCookie(player.playerId);
     await trackEvent('auth_completed', { method: 0 });
     return ok({ player, fresh: true });
   } catch (e) {

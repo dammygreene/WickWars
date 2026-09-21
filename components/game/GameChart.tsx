@@ -146,10 +146,13 @@ export function GameChart({ getTick, getNow, durationMs, frozen }: Props) {
 
       // Entry line.
       if (tick.side !== 'FLAT' && tick.entryPrice != null) {
+        const latestEntry = [...tick.events].reverse().find((e) => e.kind === 'OPEN');
+        const entryAge = latestEntry ? Math.max(0, t - latestEntry.t) : 999;
+        const entryReveal = reduced ? 1 : Math.min(1, entryAge / 220);
         const ey = y(tick.entryPrice);
         const col = tick.side === 'LONG' ? UP : DOWN;
         ctx.strokeStyle = col;
-        ctx.globalAlpha = 0.75;
+        ctx.globalAlpha = 0.75 * entryReveal;
         ctx.setLineDash([5, 4]);
         ctx.lineWidth = 1.2;
         ctx.beginPath();
@@ -172,12 +175,16 @@ export function GameChart({ getTick, getNow, durationMs, frozen }: Props) {
       for (const e of tick.events) {
         const ex = xFor(e.t);
         const eyy = y(e.price);
+        const age = Math.max(0, t - e.t);
+        const reveal = reduced ? 1 : Math.min(1, age / (e.kind === 'OPEN' ? 180 : 140));
         if (e.action === 'LONG' || e.action === 'SHORT') {
           if (e.kind !== 'OPEN') continue;
           const isLong = e.action === 'LONG';
           const my = Math.min(plotH - 10, Math.max(10, eyy + (isLong ? 16 : -16)));
+          ctx.save();
+          ctx.globalAlpha = reveal;
           ctx.beginPath();
-          ctx.arc(ex, my, 7, 0, Math.PI * 2);
+          ctx.arc(ex, my, 7 * (0.85 + reveal * 0.15), 0, Math.PI * 2);
           ctx.fillStyle = isLong ? UP : DOWN;
           ctx.fill();
           ctx.strokeStyle = '#08090C';
@@ -190,7 +197,10 @@ export function GameChart({ getTick, getNow, durationMs, frozen }: Props) {
             ctx.lineTo(ex, my + 3);
           }
           ctx.stroke();
+          ctx.restore();
         } else {
+          ctx.save();
+          ctx.globalAlpha = reveal;
           ctx.beginPath();
           ctx.arc(ex, eyy, 5.5, 0, Math.PI * 2);
           ctx.fillStyle = '#0D0F14';
@@ -204,6 +214,7 @@ export function GameChart({ getTick, getNow, durationMs, frozen }: Props) {
           ctx.moveTo(ex + 2.4, eyy - 2.4);
           ctx.lineTo(ex - 2.4, eyy + 2.4);
           ctx.stroke();
+          ctx.restore();
         }
       }
 

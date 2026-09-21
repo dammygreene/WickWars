@@ -1,10 +1,10 @@
 import { todayChallenge, seasonConfig } from '@/lib/game/challenge';
-import { getPlayer } from '@/lib/store/db';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { getPlayer, withDb } from '@/lib/store/db';
 import type { GameResult, LeaderboardRow } from '@/lib/types';
 import { currentPlayer } from '@/lib/auth/session';
 import { ok, failFrom } from '@/lib/api/json';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
@@ -12,8 +12,7 @@ export async function GET(req: Request) {
     const scope = url.searchParams.get('scope') ?? 'daily';
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
 
-    const raw = await fs.readFile(path.join(process.cwd(), '.data', 'db.json'), 'utf8').catch(() => null);
-    const results: GameResult[] = raw ? Object.values((JSON.parse(raw) as { results: Record<string, GameResult> }).results ?? {}) : [];
+    const results: GameResult[] = await withDb((db) => Object.values(db.results));
     const verified = results.filter((r) => r.verified);
 
     const challenge = todayChallenge();

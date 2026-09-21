@@ -4,6 +4,7 @@ import type { Game, GameResult, MarketScenario, ResultState } from '@/lib/types'
 import { calculateScore } from './scoring';
 import { closingEvent, computeFinalStats } from './engine';
 import { levelForGames, titleForGames, archetypeForStats } from '@/lib/auth/identity';
+import { logEvent } from '@/lib/server/log';
 
 /**
  * Authoritative finalization. Runs INSIDE the store write-lock with direct db
@@ -126,6 +127,14 @@ export function finalizeLocked(
     p.level = levelForGames(ps.games);
     db.players[game.playerId] = p;
   }
+
+  logEvent('game_completed', {
+    gameId: game.id,
+    playerId: game.playerId,
+    score,
+    pnl: stats.pnl,
+    liquidated,
+  });
 
   return result;
 }

@@ -2,8 +2,9 @@ import { readCardAsset } from '@/lib/cards/render';
 
 export const runtime = 'nodejs';
 
-export async function GET(_req: Request, { params }: { params: { cardId: string } }) {
-  const png = await readCardAsset(params.cardId, 'png');
+export async function GET(_req: Request, { params }: { params: Promise<{ cardId: string }> }) {
+  const { cardId } = await params;
+  const png = await readCardAsset(cardId, 'png');
   if (!png) return new Response('Card not found', { status: 404 });
   return new Response(new Uint8Array(png), {
     headers: {

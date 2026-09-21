@@ -7,6 +7,7 @@ import { useGame } from '@/lib/client/useGame';
 import { usePlayer } from '@/lib/client/usePlayer';
 import { GameChart } from '@/components/game/GameChart';
 import { TradeControls } from '@/components/game/TradeControls';
+import { GameFeedbackLayer, type FeedbackState } from '@/components/game/GameFeedbackLayer';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { Button } from '@/components/ui/Button';
 import { LoadingState } from '@/components/ui/States';
@@ -147,9 +148,25 @@ export default function PlayPage() {
   const dur = game.game?.durationMs ?? 45000;
   const remainMs = t ? Math.max(0, dur - getNow()) : dur;
   const pnlUp = (t?.pnl ?? 0) >= 0;
+  const pnl = t?.pnl ?? 0;
+  const feedbackState: FeedbackState =
+    game.phase === 'over' && t?.status === 'LIQUIDATED'
+      ? 'liquidated'
+      : game.phase === 'over'
+        ? 'round-end'
+        : t?.side === 'FLAT'
+          ? 'neutral'
+          : pnl > 0
+            ? 'profit'
+            : pnl < 0
+              ? 'loss'
+              : 'neutral';
+  const feedbackIntensity = Math.min(1, Math.pow(Math.abs(pnl) / (game.game?.startBalance ?? 10000), 0.7) * 1.8);
 
   return (
-    <div className="ww-container max-w-5xl pb-10 pt-4 sm:pt-6">
+    <>
+      <GameFeedbackLayer state={feedbackState} intensity={feedbackIntensity} event={game.feedback} />
+      <div className="ww-container relative z-[1] max-w-5xl pb-10 pt-4 sm:pt-6">
       {/* HUD */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -167,16 +184,18 @@ export default function PlayPage() {
       </div>
 
       <div className="mt-3 grid grid-cols-4 gap-2 sm:gap-3" role="status" aria-label="Game status">
-        <HudCell label="TIME" value={fmtClock(remainMs)} mono accent={remainMs < 10000 ? 'text-ww-loss' : 'text-ww-text'} />
+        <HudCell label="TIME" value={fmtClock(remainMs)} mono accent={remainMs < 10000 ? 'text-ww-loss' : 'text-ww-text'} urgent={remainMs < 10000} />
         <HudCell
           label="P&L"
           value={t ? fmtSignedMoney(t.pnl) : '—'}
+          animatedValue={t?.pnl}
+          animatedFormatter={fmtSignedMoney}
           mono
           accent={pnlUp ? 'text-ww-win' : 'text-ww-loss'}
           flash={t ? (pnlUp ? 'up' : 'down') : undefined}
           flashKey={t ? Math.round(t.pnl) : 0}
         />
-        <HudCell label="EQUITY" value={t ? fmtMoney(t.equity) : '—'} mono />
+        <HudCell label="EQUITY" value={t ? fmtMoney(t.equity) : '—'} animatedValue={t?.equity} animatedFormatter={fmtMoney} mono />
         <HudCell
           label={game.phase === 'over' ? 'RANK' : 'PROJ. RANK'}
           value={t?.provisionalRank != null ? `#${t.provisionalRank}` : '—'}
@@ -275,7 +294,8 @@ export default function PlayPage() {
         />
       </div>
       <p className="mt-2 text-center font-sans text-xs text-ww-disabled sm:hidden">One thumb. No mercy.</p>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -286,6 +306,9 @@ function HudCell({
   accent,
   flash,
   flashKey,
+  animatedValue,
+  animatedFormatter,
+  urgent,
 }: {
   label: string;
   value: string;
@@ -293,6 +316,9 @@ function HudCell({
   accent?: string;
   flash?: 'up' | 'down';
   flashKey?: number;
+  animatedValue?: number;
+  animatedFormatter?: (value: number) => string;
+  urgent?: boolean;
 }) {
   return (
     <div className="rounded-xl border border-ww-border bg-ww-elevated px-2 py-2.5 text-center sm:px-4 sm:py-3">
@@ -305,12 +331,35 @@ function HudCell({
           accent ?? 'text-ww-text',
           flash === 'up' && 'tick-flash-up',
           flash === 'down' && 'tick-flash-down',
+          urgent && 'timer-urgent',
         )}
       >
-        {value}
+        {animatedValue != null && animatedFormatter ? <AnimatedMetric target={animatedValue} format={animatedFormatter} /> : value}
       </p>
     </div>
   );
+}
+
+function AnimatedMetric({ target, format }: { target: number; format: (value: number) => string }) {
+  const [shown, setShown] = useState(target);
+  const from = useRef(shown);
+  useEffect(() => {
+    const start = performance.now();
+    const initial = from.current;
+    const duration = 150;
+    let raf = 0;
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const next = initial + (target - initial) * eased;
+      setShown(next);
+      if (progress < 1) raf = requestAnimationFrame(step);
+      else from.current = target;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return <>{format(shown)}</>;
 }
 
 function PositionBadge({ side, entry }: { side: 'FLAT' | 'LONG' | 'SHORT'; entry: number | null }) {

@@ -9,6 +9,9 @@ const TTL_MS = 30 * 24 * 3600 * 1000; // 30 days
 function secret(): string {
   const s = process.env.WW_SESSION_SECRET;
   if (!s) throw new Error('WW_SESSION_SECRET is not set');
+  if (process.env.NODE_ENV === 'production' && s.length < 32) {
+    throw new Error('WW_SESSION_SECRET must be at least 32 characters in production');
+  }
   return s;
 }
 
@@ -45,7 +48,7 @@ export function verifySession(token: string | undefined | null): SessionPayload 
 }
 
 export async function currentPlayer(): Promise<PlayerIdentity | null> {
-  const token = cookies().get(COOKIE)?.value;
+  const token = (await cookies()).get(COOKIE)?.value;
   const s = verifySession(token);
   if (!s) return null;
   return getPlayer(s.pid);
@@ -57,8 +60,8 @@ export async function requirePlayer(): Promise<PlayerIdentity> {
   return p;
 }
 
-export function setSessionCookie(playerId: string) {
-  cookies().set(COOKIE, mintSession(playerId), {
+export async function setSessionCookie(playerId: string) {
+  (await cookies()).set(COOKIE, mintSession(playerId), {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
@@ -67,8 +70,8 @@ export function setSessionCookie(playerId: string) {
   });
 }
 
-export function clearSessionCookie() {
-  cookies().delete(COOKIE);
+export async function clearSessionCookie() {
+  (await cookies()).delete(COOKIE);
 }
 
 export class AuthError extends Error {

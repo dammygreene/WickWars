@@ -14,6 +14,8 @@ import { PlayerProvider } from '@/lib/client/usePlayer';
 import { ToastProvider } from '@/components/ui/Toast';
 import { Header } from '@/components/nav/Header';
 import { Footer } from '@/components/nav/Footer';
+import { AtmosphereBackground } from '@/components/ui/AtmosphereBackground';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 
 export const metadata: Metadata = {
   title: { default: 'WICK WARS — Trade the chart. Survive the wick.', template: '%s — WICK WARS' },
@@ -46,16 +48,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className="min-h-dvh bg-ww-bg font-sans text-ww-text antialiased">
-        <ToastProvider>
-          <PlayerProvider>
-            <a href="#main" className="skip-link">
-              Skip to content
-            </a>
-            <Header />
-            <main id="main">{children}</main>
-            <Footer />
-          </PlayerProvider>
-        </ToastProvider>
+        <AtmosphereBackground />
+        <LoadingScreen />
+        <div className="relative z-[1]">
+          <ToastProvider>
+            <PlayerProvider>
+              <a href="#main" className="skip-link">
+                Skip to content
+              </a>
+              <Header />
+              <main id="main">{children}</main>
+              <Footer />
+            </PlayerProvider>
+          </ToastProvider>
+        </div>
       </body>
     </html>
   );

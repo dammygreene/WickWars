@@ -2,9 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  experimental: {
-    serverComponentsExternalPackages: ['@resvg/resvg-js', 'sharp'],
-  },
+  serverExternalPackages: ['@resvg/resvg-js', 'sharp'],
   images: {
     remotePatterns: [{ protocol: 'https', hostname: '**' }],
   },

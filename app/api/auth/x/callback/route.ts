@@ -4,6 +4,7 @@ import { currentPlayer, setSessionCookie } from '@/lib/auth/session';
 import { emptyStats, newId, savePlayer, usernameTaken, getPlayer } from '@/lib/store/db';
 import { trackEvent } from '@/lib/store/db';
 import type { PlayerIdentity } from '@/lib/types';
+import { logError, logEvent } from '@/lib/server/log';
 
 function base(): string {
   return process.env.WW_BASE_URL || 'http://localhost:3000';
@@ -16,13 +17,19 @@ export async function GET(req: Request) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   const err = url.searchParams.get('error');
-  if (err) return fail('denied');
-  const jar = cookies();
+  if (err) {
+    logEvent('oauth_failure', { reason: 'denied' });
+    return fail('denied');
+  }
+  const jar = await cookies();
   const wantState = jar.get('ww_x_state')?.value;
   const verifier = jar.get('ww_x_verifier')?.value;
   jar.delete('ww_x_state');
   jar.delete('ww_x_verifier');
-  if (!code || !state || !wantState || state !== wantState || !verifier) return fail('invalid');
+  if (!code || !state || !wantState || state !== wantState || !verifier) {
+    logEvent('oauth_failure', { reason: 'invalid_state' });
+    return fail('invalid');
+  }
 
   try {
     const tokens = await exchangeCode(code, verifier);
@@ -45,7 +52,7 @@ export async function GET(req: Request) {
         x: { userId: xu.id, handle: xu.username, avatarUrl: avatar },
       };
       await savePlayer(next);
-      setSessionCookie(next.playerId);
+      await setSessionCookie(next.playerId);
       await trackEvent('auth_completed', { method: 1 });
       return Response.redirect(`${base()}/profile/${username}`, 302);
     }
@@ -62,7 +69,7 @@ export async function GET(req: Request) {
         x: { userId: xu.id, handle: xu.username, avatarUrl: avatar },
       };
       await savePlayer(next);
-      setSessionCookie(next.playerId);
+      await setSessionCookie(next.playerId);
       await trackEvent('auth_completed', { method: 1 });
       return Response.redirect(`${base()}/profile/${next.username}`, 302);
     }
@@ -83,12 +90,12 @@ export async function GET(req: Request) {
       createdAt: Date.now(),
     };
     await savePlayer(p, emptyStats());
-    setSessionCookie(p.playerId);
+    await setSessionCookie(p.playerId);
     await getPlayer(p.playerId); // warm
     await trackEvent('auth_completed', { method: 1 });
     return Response.redirect(`${base()}/profile/${username}`, 302);
   } catch (e) {
-    console.error('[x-callback]', e);
+    logError('oauth_failure', e);
     return fail('failed');
   }
 }

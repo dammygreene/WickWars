@@ -5,6 +5,7 @@ import { findActiveGame, newId, saveGame, trackEvent } from '@/lib/store/db';
 import type { Game } from '@/lib/types';
 import { ok, fail, failFrom } from '@/lib/api/json';
 import { rateLimit, clientKey } from '@/lib/api/ratelimit';
+import { logEvent } from '@/lib/server/log';
 
 export async function POST(req: Request) {
   try {
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
       createdAt: now,
     };
     await saveGame(game);
+    logEvent('game_created', { gameId: game.id, playerId: me.playerId, challengeId: game.challengeId });
     await trackEvent('game_started');
     return ok({
       game: {

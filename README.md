@@ -15,13 +15,16 @@ Product specs: `blueprint.md` · `ui_ux.md` · `design.md` · `build-prompt.md` 
 - **Auth:** X OAuth 2.0 (PKCE) + wallet `personal_sign` verification (`viem`) + guest handles. No transaction is ever required to play.
 - Tests: `vitest` (18 unit tests) + `scripts/e2e-qa.mjs` (full game-loop QA)
 
-## Quickstart
+## Local development
 
 ```bash
 npm install
-cp .env.local .env.local   # already present for dev; set WW_SESSION_SECRET in prod
+npm run production:check   # after setting environment variables
 npm run dev                # http://localhost:3000
 ```
+
+For local play, guest auth works without OAuth. Set a random `WW_SESSION_SECRET` of at least 32 characters. Do not commit
+`.env.local` or `.data/`.
 
 Useful scripts:
 
@@ -37,14 +40,15 @@ Useful scripts:
 | `npm run cards:test` | Render sample cards to `/tmp` for visual QA |
 | `npx tsx scripts/cards-edge.ts` | Render card edge cases (loss/huge/tiny/long-name/no-trade/avatar) |
 | `npx tsx scripts/render-examples.ts` | Regenerate landing-page example cards |
+| `npm run production:check` | Validate production environment variables without printing secrets |
 
 ## Environment
 
 | Var | Purpose |
 |---|---|
-| `WW_SESSION_SECRET` | HMAC secret for session cookies (rotate in prod!) |
-| `WW_BASE_URL` | Canonical URL (OG tags, share links, X callback) |
-| `X_CLIENT_ID` / `X_CLIENT_SECRET` / `X_REDIRECT_URI` | X OAuth 2.0 (optional — UI degrades honestly when unset) |
+| `WW_SESSION_SECRET` | Required. Random HMAC secret, minimum 32 characters; server-only. |
+| `WW_BASE_URL` | Required. Production value is exactly `https://wickwars.xyz`; used for OG/share URLs. |
+| `X_CLIENT_ID` / `X_CLIENT_SECRET` / `X_REDIRECT_URI` | Optional as a group. `X_REDIRECT_URI` must be `https://wickwars.xyz/api/auth/x/callback` and must match the X application. Secrets are server-only. |
 | `WW_SEASON_ID` / `WW_SEASON_NAME` / `WW_SEASON_START` / `WW_SEASON_END` | Current season window (UTC) |
 
 ## Architecture
@@ -83,8 +87,16 @@ public/brand|examples   logo assets · landing example cards
 embeds avatars via the template clip-paths (fallback initials), shrink-fits long values, renders at 2x, and downsamples
 to the final 1200×1500 PNG. Cards are content-addressed (`dataRev`) and reused when inputs are unchanged.
 
-## Deploy notes
+## Production deployment
 
-- Set `WW_SESSION_SECRET` + `WW_BASE_URL`; configure X OAuth for X login.
-- `.data/` is ephemeral local storage — for production, implement `lib/store/db.ts` against Postgres (+ object storage for `lib/cards/render.ts` output) and set `maxDuration` on card routes.
-- `sharp` + `@resvg/resvg-js` ship prebuilt binaries (see `serverComponentsExternalPackages` in `next.config.mjs`).
+- Run `npm run production:check`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, then the E2E script against the production server.
+- Deploy one application instance only. The current `.data/` JSON store uses an in-process write mutex and atomic temp-file rename; it is not safe for multiple instances or shared network writers.
+- Mount `.data/` on persistent writable disk. Losing that directory loses players, games, results, cards, nonces, and analytics. Back up `db.json` and `.data/cards/` regularly; test restore before launch.
+- A missing `db.json` starts a fresh empty store. Read/parse failures are logged and fail requests rather than silently resetting data. Restarting with the same persistent disk preserves data.
+- Keep `WW_SESSION_SECRET`, X credentials, wallet signatures, and OAuth tokens server-only. Never use `NEXT_PUBLIC_` for them.
+- Configure the X developer application callback to exactly match `X_REDIRECT_URI`; for launch this is `https://wickwars.xyz/api/auth/x/callback`.
+- `sharp` and `@resvg/resvg-js` ship prebuilt binaries (see `next.config.mjs`). Card routes already have a 60-second max duration and rate limit.
+
+Production logs are newline-delimited JSON with event names such as `game_completed`, `invalid_trade`, `request_rejected`,
+`oauth_failure`, `wallet_auth_failure`, `card_generation_failed`, and `persistence_*`. They contain operational identifiers where
+available, but never secrets, tokens, signatures, or request bodies.

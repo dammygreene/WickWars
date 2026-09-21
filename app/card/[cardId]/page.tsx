@@ -5,9 +5,10 @@ import { getCard, getPlayer, getResult } from '@/lib/store/db';
 import { Avatar } from '@/components/ui/Avatar';
 import { fmtPct } from '@/lib/utils';
 
-export async function generateMetadata({ params }: { params: { cardId: string } }): Promise<Metadata> {
+export async function generateMetadata({ params }: { params: Promise<{ cardId: string }> }): Promise<Metadata> {
   const base = process.env.WW_BASE_URL || 'http://localhost:3000';
-  const card = await getCard(params.cardId);
+  const { cardId } = await params;
+  const card = await getCard(cardId);
   if (!card) return { title: 'Card' };
   const player = await getPlayer(card.playerId);
   const result = card.gameId ? await getResult(card.gameId) : null;
@@ -25,8 +26,9 @@ export async function generateMetadata({ params }: { params: { cardId: string } 
   };
 }
 
-export default async function CardPage({ params }: { params: { cardId: string } }) {
-  const card = await getCard(params.cardId);
+export default async function CardPage({ params }: { params: Promise<{ cardId: string }> }) {
+  const { cardId } = await params;
+  const card = await getCard(cardId);
   if (!card) notFound();
   const player = await getPlayer(card.playerId);
   const result = card.gameId ? await getResult(card.gameId) : null;

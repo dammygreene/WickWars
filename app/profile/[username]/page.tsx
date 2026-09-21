@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { ProfileView } from '@/components/profile/ProfileView';
 import { getPlayerByUsername, getStats } from '@/lib/store/db';
 
-export async function generateMetadata({ params }: { params: { username: string } }): Promise<Metadata> {
-  const handle = decodeURIComponent(params.username).replace(/^@/, '');
+export async function generateMetadata({ params }: { params: Promise<{ username: string }> }): Promise<Metadata> {
+  const { username } = await params;
+  const handle = decodeURIComponent(username).replace(/^@/, '');
   try {
     const p = await getPlayerByUsername(handle);
     if (!p) return { title: 'Player not found' };
@@ -16,6 +17,7 @@ export async function generateMetadata({ params }: { params: { username: string 
   }
 }
 
-export default function ProfilePage({ params }: { params: { username: string } }) {
-  return <ProfileView username={decodeURIComponent(params.username)} />;
+export default async function ProfilePage({ params }: { params: Promise<{ username: string }> }) {
+  const { username } = await params;
+  return <ProfileView username={decodeURIComponent(username)} />;
 }

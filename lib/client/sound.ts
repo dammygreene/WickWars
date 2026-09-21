@@ -67,6 +67,7 @@ export const sfx = {
     blip(990, 140, 'triangle', 0.05, 0.07);
   },
   closeLoss: () => blip(220, 160, 'triangle'),
+  impact: () => blip(150, 100, 'sawtooth', 0.025),
   end: () => blip(520, 220, 'sine', 0.06),
   rekt: () => blip(110, 400, 'sawtooth', 0.04),
 };

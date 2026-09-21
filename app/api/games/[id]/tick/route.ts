@@ -18,8 +18,9 @@ function pendingFinalization(game: Game, now: number): boolean {
   return snap.side !== 'FLAT' && snap.equity <= game.startBalance * LIQUIDATION_EQUITY_RATIO;
 }
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params;
     const me = await currentPlayer();
     // The client polls ~5/s during a run; 900/min is ~3x headroom. This only
     // blunts hammering — normal play never trips it.
@@ -28,7 +29,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return fail('RATE_LIMITED', 'Too many updates — slowing down.', 429, { 'Retry-After': String(rl.retryAfterS) });
     }
 
-    const game = await getGame(params.id);
+    const game = await getGame(id);
     if (!game) return fail('GAME_NOT_FOUND', 'Game not found.', 404);
     // Ticks are owner-only until finished (prevents peeking at others' live runs).
     if (me?.playerId !== game.playerId && !game.resultId) {
@@ -38,7 +39,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     // Fast path: finished runs are immutable — serve read-only with zero disk
     // writes (polling used to rewrite the whole store on every 200ms tick).
     if (game.resultId) {
-      const result = await getResult(params.id);
+      const result = await getResult(id);
       if (result) return ok(finishedTick(game, result));
     }
 
@@ -50,7 +51,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     }
 
     // Transition tick: finalize under the write lock exactly once.
-    const out = await mutateGame(params.id, (g, db) => {
+    const out = await mutateGame(id, (g, db) => {
       if (!g) return null;
       return computeTick(db, g, Date.now(), true);
     });

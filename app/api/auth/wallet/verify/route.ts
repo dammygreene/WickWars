@@ -5,6 +5,7 @@ import { currentPlayer, setSessionCookie } from '@/lib/auth/session';
 import { trackEvent } from '@/lib/store/db';
 import type { PlayerIdentity } from '@/lib/types';
 import { ok, fail, failFrom } from '@/lib/api/json';
+import { logEvent } from '@/lib/server/log';
 
 const Body = z.object({
   address: z.string(),
@@ -23,7 +24,10 @@ export async function POST(req: Request) {
     const okNonce = await consumeNonce(checksum, nonceMatch[1]);
     if (!okNonce) return fail('WALLET_INVALID', 'Challenge expired. Try again.', 401);
     const valid = await verifyMessage({ address: checksum, message, signature: signature as `0x${string}` });
-    if (!valid) return fail('WALLET_INVALID', 'Wallet signature invalid.', 401);
+    if (!valid) {
+      logEvent('wallet_auth_failure', { reason: 'invalid_signature' });
+      return fail('WALLET_INVALID', 'Wallet signature invalid.', 401);
+    }
 
     const me = await currentPlayer();
     let player: PlayerIdentity;
@@ -50,7 +54,7 @@ export async function POST(req: Request) {
       player.username = h;
       await savePlayer(player, emptyStats());
     }
-    setSessionCookie(player.playerId);
+    await setSessionCookie(player.playerId);
     await trackEvent('wallet_connected');
     await trackEvent('auth_completed', { method: 2 });
     return ok({ player });

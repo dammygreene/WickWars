@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --ww-bg: #08090c;
-  --ww-bg-elevated: #0d0f13;
-  --ww-surface: #11141a;
-  --ww-surface-2: #171a21;
-  --ww-border: #20242b;
-  --ww-border-strong: #2a3038;
+  --ww-bg: #07080b;
+  --ww-bg-elevated: #0b0d11;
+  --ww-surface: #10131a;
+  --ww-surface-2: #171b23;
+  --ww-border: #171b23;
+  --ww-border-strong: #252b35;
   --ww-text-primary: #f5f7fa;
   --ww-text-secondary: #a5acb7;
   --ww-text-muted: #707783;
@@ -26,6 +26,182 @@ body {
   background: var(--ww-bg);
   text-rendering: optimizeLegibility;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Shared dark market atmosphere: gradients, grid, traces, and a static grain veil. */
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 58% 48% at 8% 3%, rgba(53, 229, 139, 0.075), transparent 72%),
+    radial-gradient(ellipse 56% 46% at 92% 8%, rgba(255, 79, 94, 0.06), transparent 72%),
+    linear-gradient(180deg, #07080b 0%, #08090c 56%, #06070a 100%);
+  opacity: 0.92;
+}
+.atmosphere::before,
+.atmosphere::after {
+  position: absolute;
+  content: '';
+  inset: -14%;
+  pointer-events: none;
+}
+.atmosphere::before {
+  background:
+    radial-gradient(ellipse 34% 30% at 18% 22%, rgba(53, 229, 139, 0.055), transparent 75%),
+    radial-gradient(ellipse 31% 28% at 82% 20%, rgba(255, 79, 94, 0.045), transparent 75%);
+  animation: atmosphere-drift 18s ease-in-out infinite alternate;
+  z-index: -2;
+}
+.atmosphere::after {
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(0, 0, 0, 0.34) 100%);
+  z-index: 4;
+}
+.atmosphere-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
+  background-size: 100% 72px, 92px 100%;
+  mask-image: radial-gradient(ellipse at center, black 12%, rgba(0, 0, 0, 0.72) 55%, transparent 96%);
+  animation: atmosphere-grid-drift 16s linear infinite;
+}
+.atmosphere-trace {
+  position: absolute;
+  width: 54vw;
+  height: 24vh;
+  opacity: 0.07;
+  clip-path: polygon(0 72%, 12% 64%, 21% 69%, 32% 38%, 43% 48%, 55% 18%, 64% 31%, 75% 24%, 85% 43%, 100% 10%, 100% 14%, 86% 48%, 75% 29%, 64% 37%, 55% 24%, 43% 54%, 32% 44%, 21% 75%, 12% 70%, 0 78%);
+  background: linear-gradient(90deg, transparent, rgba(53, 229, 139, 0.95), transparent);
+  transform: rotate(-5deg);
+  animation: atmosphere-trace-drift 14s ease-in-out infinite alternate;
+}
+.atmosphere-trace-one { left: -8vw; top: 12vh; }
+.atmosphere-trace-two {
+  right: -12vw;
+  top: 38vh;
+  opacity: 0.045;
+  transform: rotate(7deg) scaleX(-1);
+  background: linear-gradient(90deg, transparent, rgba(255, 79, 94, 0.9), transparent);
+  animation-delay: -5s;
+}
+.atmosphere-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.028;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.32'/%3E%3C/svg%3E");
+  mix-blend-mode: screen;
+}
+.atmosphere-loading { opacity: 1; }
+.atmosphere-loading .atmosphere-grid { opacity: 0.56; }
+.atmosphere-profit,
+.atmosphere-intense-profit { --atmosphere-green: 1.8; }
+.atmosphere-loss,
+.atmosphere-intense-loss { --atmosphere-red: 1.8; }
+.atmosphere-intense-profit::before { filter: saturate(1.25); opacity: 1.3; }
+.atmosphere-intense-loss::before { filter: saturate(1.25); opacity: 1.3; }
+.atmosphere-liquidation { animation: atmosphere-liquidation 520ms ease-out; }
+.game-atmosphere { z-index: 0; opacity: 0.76; }
+.game-atmosphere + .game-feedback-layer,
+.game-atmosphere + .game-feedback-layer + .game-feedback-impact { z-index: 2; }
+@keyframes atmosphere-drift {
+  from { transform: translate3d(-1%, -1%, 0) scale(1); }
+  to { transform: translate3d(1.5%, 1%, 0) scale(1.03); }
+}
+@keyframes atmosphere-grid-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(8px, 4px, 0); }
+}
+@keyframes atmosphere-trace-drift {
+  from { transform: translate3d(-1%, 0, 0) rotate(-5deg); }
+  to { transform: translate3d(2%, 3%, 0) rotate(-4deg); }
+}
+@keyframes atmosphere-liquidation {
+  0%, 100% { filter: saturate(1); }
+  18% { filter: saturate(1.8) brightness(1.12); }
+  48% { filter: saturate(1.35); }
+}
+
+/* Loading is a full-screen branded state, not a generic progress widget. */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--ww-bg);
+}
+.loading-screen-exiting {
+  opacity: 0;
+  transition: opacity 450ms ease;
+}
+.loading-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(82vw, 420px);
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  animation: loading-content-in 600ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.loading-logo-wrap {
+  position: relative;
+  padding: 22px 24px;
+}
+.loading-logo-wrap::before {
+  position: absolute;
+  content: '';
+  inset: -70px -110px;
+  z-index: -1;
+  background: radial-gradient(ellipse at 36% 50%, rgba(53, 229, 139, 0.13), transparent 46%), radial-gradient(ellipse at 66% 50%, rgba(255, 79, 94, 0.11), transparent 48%);
+  filter: blur(18px);
+}
+.loading-logo { width: min(72vw, 300px); height: auto; }
+.loading-progress {
+  position: relative;
+  width: min(58vw, 250px);
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(245, 247, 250, 0.12);
+}
+.loading-progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ww-loss), var(--ww-win));
+  animation: loading-progress 1.35s ease-in-out infinite;
+}
+.loading-label {
+  margin: 0;
+  color: rgba(245, 247, 250, 0.7);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+}
+.loading-sublabel {
+  margin: -10px 0 0;
+  color: var(--ww-text-muted);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+@keyframes loading-content-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes loading-progress {
+  0% { transform: translateX(-125%); }
+  55%, 100% { transform: translateX(285%); }
 }
 
 ::selection {
@@ -95,6 +271,13 @@ body {
 .tick-flash-down {
   animation: tickDown 0.35s ease;
 }
+.timer-urgent {
+  animation: timerUrgent 0.9s ease-in-out infinite;
+}
+@keyframes timerUrgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.68; }
+}
 @keyframes tickUp {
   0% {
     color: var(--ww-win);
@@ -123,6 +306,71 @@ body {
 }
 .live-dot {
   animation: ww-pulse-soft 1.6s ease-in-out infinite;
+}
+
+/* Gameplay feedback stays on the compositor and never participates in layout. */
+.game-feedback-layer,
+.game-feedback-impact {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.game-feedback-layer {
+  opacity: 0;
+  transition: opacity 320ms ease, background 320ms ease;
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(53, 229, 139, calc(var(--feedback-intensity) * 0.42)) 100%);
+}
+.game-feedback-profit,
+.game-feedback-loss {
+  opacity: 1;
+  animation: ww-feedback-breathe 3.6s ease-in-out infinite;
+}
+.game-feedback-loss {
+  background: radial-gradient(ellipse at center, transparent 48%, rgba(255, 79, 94, calc(var(--feedback-intensity) * 0.42)) 100%);
+}
+.game-feedback-impact {
+  opacity: 0;
+  background: rgba(255, 79, 94, 0.09);
+}
+.game-feedback-impact-active {
+  animation: ww-feedback-impact 180ms ease-out;
+}
+.game-feedback-liquidated-active {
+  animation: ww-feedback-liquidation 520ms ease-out;
+}
+.game-feedback-liquidated {
+  opacity: 1;
+  background: radial-gradient(ellipse at center, transparent 44%, rgba(255, 79, 94, 0.11) 100%);
+}
+.game-feedback-round-end {
+  opacity: 0.35;
+}
+@keyframes ww-feedback-breathe {
+  0%, 100% { opacity: 0.82; }
+  50% { opacity: 1; }
+}
+@keyframes ww-feedback-impact {
+  0% { opacity: 0; }
+  25% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes ww-feedback-liquidation {
+  0% { opacity: 0; }
+  18% { opacity: 1; }
+  42% { opacity: 0.45; }
+  100% { opacity: 0; }
+}
+
+.game-feedback-impact-active ~ .ww-container,
+.game-feedback-liquidated-active ~ .ww-container {
+  animation: ww-game-shake 180ms ease-out;
+}
+@keyframes ww-game-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  25% { transform: translate3d(-2px, 0, 0); }
+  50% { transform: translate3d(2px, 1px, 0); }
+  75% { transform: translate3d(-1px, 0, 0); }
 }
 
 /* Skeleton shimmer */
@@ -158,5 +406,27 @@ body {
   }
   .live-dot {
     animation: none;
+  }
+  .atmosphere::before,
+  .atmosphere-grid,
+  .atmosphere-trace,
+  .atmosphere-liquidation,
+  .loading-content,
+  .loading-progress span {
+    animation: none !important;
+  }
+  .timer-urgent {
+    animation: none;
+  }
+  .game-feedback-layer,
+  .game-feedback-impact,
+  .game-feedback-impact-active,
+  .game-feedback-liquidated-active {
+    animation: none;
+    transition: none;
+  }
+  .game-feedback-impact-active,
+  .game-feedback-liquidated-active {
+    opacity: 0.08;
   }
 }

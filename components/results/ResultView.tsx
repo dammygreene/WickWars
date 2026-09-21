@@ -98,20 +98,20 @@ export function ResultView({ gameId }: { gameId: string }) {
             @{rp?.username ?? 'ghost'} · {r.mode} · {r.seasonId}
           </p>
         </div>
-        <p className={cn('ww-mono mt-4 inline-block rounded-full px-4 py-1.5 text-xs font-bold tracking-[0.18em]', won ? 'bg-ww-win/10 text-ww-win' : 'bg-ww-loss/10 text-ww-loss')}>
+        <motion.p initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.25, delay: 0.1 }} className={cn('ww-mono mt-4 inline-block rounded-full px-4 py-1.5 text-xs font-bold tracking-[0.18em]', won ? 'bg-ww-win/10 text-ww-win' : 'bg-ww-loss/10 text-ww-loss')}>
           {r.resultState.replace('_', ' ')}
-        </p>
-        <h1 className={cn('mt-3 font-display text-[clamp(2rem,10vw,3.75rem)] font-bold leading-tight tracking-tight', won ? 'text-ww-win' : 'text-ww-loss')}>
+        </motion.p>
+        <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.2 }} className={cn('mt-3 font-display text-[clamp(2rem,10vw,3.75rem)] font-bold leading-tight tracking-tight', won ? 'text-ww-win' : 'text-ww-loss')}>
           {tag.big}
-        </h1>
-        <p className="mt-2 font-sans text-[15px] text-ww-secondary">{tag.sub}</p>
+        </motion.h1>
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25, delay: 0.3 }} className="mt-2 font-sans text-[15px] text-ww-secondary">{tag.sub}</motion.p>
 
-        <p className={cn('ww-mono mt-6 text-[clamp(2.1rem,11vw,3.75rem)] font-bold leading-none tracking-tight', won ? 'text-ww-win' : 'text-ww-loss')} aria-label={`Profit and loss ${fmtSignedMoney(r.pnl)}`}>
+        <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.38 }} className={cn('ww-mono mt-6 text-[clamp(2.1rem,11vw,3.75rem)] font-bold leading-none tracking-tight', won ? 'text-ww-win' : 'text-ww-loss')} aria-label={`Profit and loss ${fmtSignedMoney(r.pnl)}`}>
           {fmtSignedMoney(pnlShown)}
-        </p>
-        <p className={cn('ww-mono mt-1 text-xl font-semibold', won ? 'text-ww-win/80' : 'text-ww-loss/80')}>
+        </motion.p>
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25, delay: 0.52 }} className={cn('ww-mono mt-1 text-xl font-semibold', won ? 'text-ww-win/80' : 'text-ww-loss/80')}>
           ({r.roi >= 0 ? '▲' : '▼'} {fmtPct(r.roi).replace('+', '')})
-        </p>
+        </motion.p>
         {r.liquidated && <p className="ww-label mt-2 !text-ww-loss">LIQUIDATED · POSITION CLOSED BY THE HOUSE</p>}
       </motion.div>
 

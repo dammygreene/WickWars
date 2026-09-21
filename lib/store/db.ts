@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { logError } from '@/lib/server/log';
 import type {
   CardRecord,
   Game,
@@ -60,16 +61,25 @@ async function readDb(): Promise<DbShape> {
     const parsed = JSON.parse(raw) as DbShape;
     if (parsed.version !== 1) return structuredClone(EMPTY);
     return parsed;
-  } catch {
-    return structuredClone(EMPTY);
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'ENOENT') {
+      return structuredClone(EMPTY);
+    }
+    logError('persistence_read_failed', error, { file: DB_FILE });
+    throw error;
   }
 }
 
 async function writeDb(db: DbShape): Promise<void> {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  const tmp = `${DB_FILE}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(db));
-  await fs.rename(tmp, DB_FILE);
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    const tmp = `${DB_FILE}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(db));
+    await fs.rename(tmp, DB_FILE);
+  } catch (error) {
+    logError('persistence_write_failed', error, { file: DB_FILE });
+    throw error;
+  }
 }
 
 export function newId(prefix: string): string {

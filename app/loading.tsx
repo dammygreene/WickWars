@@ -1,9 +1,5 @@
-import { LoadingState } from '@/components/ui/States';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 
 export default function Loading() {
-  return (
-    <div className="ww-container max-w-3xl">
-      <LoadingState label="LOADING" />
-    </div>
-  );
+  return <LoadingScreen />;
 }

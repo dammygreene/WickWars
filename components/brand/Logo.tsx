@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
 export function IconMark({ className }: { className?: string }) {
@@ -23,9 +24,9 @@ export function Lockup({ className }: { className?: string }) {
 
 export function BrandLink({ compact }: { compact?: boolean }) {
   return (
-    <a href="/" className="flex items-center gap-2.5" aria-label="WICK WARS home">
+    <Link href="/" className="flex items-center gap-2.5" aria-label="WICK WARS home">
       <IconMark className="h-8 w-8" />
       {!compact && <Wordmark className="hidden h-[22px] min-[400px]:block" />}
-    </a>
+    </Link>
   );
 }

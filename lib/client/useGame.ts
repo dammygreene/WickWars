@@ -5,6 +5,7 @@ import { api, errMsg } from './api';
 import { track } from './analytics';
 import type { TickSnapshot } from '@/lib/game/tick';
 import type { TradeAction } from '@/lib/types';
+import type { RunType } from '@/lib/types';
 import { sfx } from './sound';
 import type { FeedbackEvent } from '@/components/game/GameFeedbackLayer';
 
@@ -32,7 +33,8 @@ interface UseGame {
   offline: boolean;
   trading: boolean;
   countdown: string;
-  start: () => Promise<void>;
+  start: (runType?: RunType, challengeCode?: string, ghostRunId?: string, leverage?: number) => Promise<void>;
+  resume: (gameId: string) => Promise<void>;
   trade: (a: TradeAction) => Promise<void>;
   retry: () => void;
   feedback: FeedbackEvent | null;
@@ -134,12 +136,12 @@ export function useGame(): UseGame {
     [emitFeedback, stopPoll],
   );
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (runType: RunType = 'ranked', challengeCode?: string, ghostRunId?: string, leverage?: number) => {
     setError(null);
     try {
       const { game: g, serverNow } = await api<{ game: CreatedGame; serverNow: number }>('/api/games', {
         method: 'POST',
-        body: '{}',
+        body: JSON.stringify({ runType, challengeCode, ghostRunId, leverage }),
       });
       setGame(g);
       setClockSkew(serverNow - Date.now());
@@ -155,6 +157,25 @@ export function useGame(): UseGame {
       pollRef.current = window.setInterval(() => void poll(g.id), 200);
     } catch (e) {
       setError(errMsg(e, 'Could not start the game.'));
+    }
+  }, [poll, stopPoll]);
+
+  const resume = useCallback(async (gameId: string) => {
+    setError(null);
+    try {
+      const { game: g, serverNow } = await api<{ game: CreatedGame; serverNow: number }>(`/api/games/${gameId}`);
+      setGame(g);
+      setClockSkew(serverNow - Date.now());
+      prevEquityRef.current = g.startBalance;
+      prevPnlRef.current = 0;
+      lastImpactAtRef.current = 0;
+      overRef.current = false;
+      setPhase('countdown');
+      void poll(g.id);
+      stopPoll();
+      pollRef.current = window.setInterval(() => void poll(g.id), 200);
+    } catch (e) {
+      setError(errMsg(e, 'Could not resume practice.'));
     }
   }, [poll, stopPoll]);
 
@@ -235,7 +256,7 @@ export function useGame(): UseGame {
 
   useEffect(() => stopPoll, [stopPoll]);
 
-  return { phase, game, tick, clockSkew, error, offline, trading, countdown, start, trade, retry, feedback };
+  return { phase, game, tick, clockSkew, error, offline, trading, countdown, start, resume, trade, retry, feedback };
 }
 
 function vibrate(pattern: number | number[]): void {

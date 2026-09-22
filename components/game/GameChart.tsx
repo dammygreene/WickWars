@@ -218,6 +218,25 @@ export function GameChart({ getTick, getNow, durationMs, frozen }: Props) {
         }
       }
 
+      // Ghost markers are server-revealed and visually distinct from player actions.
+      for (const e of tick.ghostEvents) {
+        const ex = xFor(e.t);
+        const eyy = y(e.price);
+        ctx.save();
+        ctx.globalAlpha = reduced ? 0.72 : Math.min(0.72, Math.max(0, (t - e.t) / 220));
+        ctx.strokeStyle = '#F5F7FA';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(ex, eyy, 7, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#F5F7FA';
+        ctx.font = '700 9px "IBM Plex Mono", monospace';
+        ctx.fillText(`G ${e.action}`, Math.min(plotW - 46, ex + 8), Math.max(10, eyy - 9));
+        ctx.restore();
+      }
+
       // Live price line + tag.
       const py = y(tick.price);
       ctx.strokeStyle = '#F5F7FA';

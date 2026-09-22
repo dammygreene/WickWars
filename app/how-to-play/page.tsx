@@ -28,7 +28,7 @@ export default function HowToPlay() {
         <h2 className="font-display text-xl font-bold text-ww-text">THE LOOP — 45 SECONDS</h2>
         <ol className="mt-4 flex flex-col gap-4">
           {[
-            ['START WITH $10,000 VIRTUAL', 'Every daily round starts flat with the same balance and the same chart as everyone else. 10x leverage applies to every position.'],
+            ['START WITH $10,000 VIRTUAL', 'Every daily round starts flat with the same balance and the same chart as everyone else. Ranked Daily Wick uses fixed 10x leverage; Practice can experiment with other values.'],
             ['LONG, SHORT, OR HOLD', 'LONG rides price up, SHORT rides it down. Pressing the opposite side flips your position. CLOSE banks it. No position, no glory.'],
             ['SURVIVE THE WICK', 'Somewhere mid-round the market does something violent. If your equity drops to 5% of start, you are liquidated and the run ends.'],
             ['BANK THE CARD', 'Score, rank, P&L and every candle become a 1200×1500 performance card. Download it, post it, defend it tomorrow.'],
@@ -68,6 +68,11 @@ export default function HowToPlay() {
           <li>Only verified runs appear on leaderboards. Interrupted runs stay unverified.</li>
           <li>Simulated performance. Not trading advice. Not real markets.</li>
         </ul>
+      </section>
+
+      <section className="ww-panel mt-4 p-5 sm:p-7" aria-label="Leverage modes">
+        <h2 className="font-display text-xl font-bold text-ww-text">LEVERAGE MODES</h2>
+        <p className="mt-2 font-sans text-sm leading-relaxed text-ww-secondary">Ranked Daily Wick uses 10x leverage only. Practice supports 1x, 2x, 5x, 10x, and 20x for experimentation. Practice runs never affect the leaderboard, streak, season progression, or achievements.</p>
       </section>
 
       <div className="mt-8 flex flex-col gap-2.5 sm:flex-row">

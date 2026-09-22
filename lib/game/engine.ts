@@ -1,6 +1,6 @@
 import type { Game, MarketScenario, PositionSide, TradeAction, TradeEvent } from '@/lib/types';
 import { priceAt } from './scenario';
-import { LEVERAGE } from './constants';
+import { getGameLeverage } from './leverage';
 import { newId } from '@/lib/store/db';
 
 export const LIQUIDATION_EQUITY_RATIO = 0.05; // equity <= 5% of start => rekt
@@ -45,10 +45,10 @@ export function positionFromTrades(trades: TradeEvent[]): PositionSnapshot {
   return { side, entryPrice, notional, entryT, realized };
 }
 
-export function unrealizedPnl(side: PositionSide, entry: number | null, notional: number, price: number): number {
+export function unrealizedPnl(side: PositionSide, entry: number | null, notional: number, price: number, leverage = 10): number {
   if (side === 'FLAT' || entry == null || entry <= 0) return 0;
   const dir = side === 'LONG' ? 1 : -1;
-  return notional * LEVERAGE * dir * ((price - entry) / entry);
+  return notional * leverage * dir * ((price - entry) / entry);
 }
 
 export interface EquitySnapshot {
@@ -64,7 +64,7 @@ export interface EquitySnapshot {
 export function equityAt(game: Game, scenario: MarketScenario, elapsedMs: number): EquitySnapshot {
   const pos = positionFromTrades(game.trades);
   const price = priceAt(scenario, elapsedMs);
-  const unrealized = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price);
+  const unrealized = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price, getGameLeverage(game));
   const equity = Math.max(0, game.startBalance + pos.realized + unrealized);
   return {
     equity,
@@ -121,7 +121,7 @@ export function applyTrade(game: Game, scenario: MarketScenario, action: TradeAc
 
   if (action === 'CLOSE') {
     if (pos.side === 'FLAT') throw new TradeRejected('NO_POSITION', 'No open position to close.');
-    const rpnl = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price);
+    const rpnl = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price, getGameLeverage(game));
     events.push(
       mk({ action: 'CLOSE', kind: 'CLOSE', notional: pos.notional, sideAfter: 'FLAT', entryPriceAfter: null, realizedPnl: rpnl }),
     );
@@ -132,7 +132,7 @@ export function applyTrade(game: Game, scenario: MarketScenario, action: TradeAc
   if (pos.side === want) throw new TradeRejected('SAME_SIDE', `Already ${want.toLowerCase()}.`);
   if (pos.side !== 'FLAT') {
     // Flip: close current, open opposite at same price.
-    const rpnl = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price);
+    const rpnl = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price, getGameLeverage(game));
     events.push(
       mk({ action: 'CLOSE', kind: 'FLIP_CLOSE', notional: pos.notional, sideAfter: 'FLAT', entryPriceAfter: null, realizedPnl: rpnl }),
     );
@@ -194,7 +194,7 @@ export function computeFinalStats(
   let realized = pos.realized;
   if (pos.side !== 'FLAT') {
     // Timeout close at final price (callers append the event; stats include it).
-    realized += unrealizedPnl(pos.side, pos.entryPrice, pos.notional, endPrice);
+    realized += unrealizedPnl(pos.side, pos.entryPrice, pos.notional, endPrice, getGameLeverage(game));
   }
   const endBalance = Math.max(0, game.startBalance + realized);
   const pnl = endBalance - game.startBalance;
@@ -212,7 +212,7 @@ export function computeFinalStats(
   const timeoutClose = pos.side !== 'FLAT';
   if (timeoutClose) {
     closed++;
-    const rp = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, endPrice);
+    const rp = unrealizedPnl(pos.side, pos.entryPrice, pos.notional, endPrice, getGameLeverage(game));
     if (rp > 0) wins++;
     else if (rp < 0) losses++;
   }
@@ -232,7 +232,7 @@ export function computeFinalStats(
     }
     const seg = segs.find((s) => t >= s.from && t <= s.to);
     const price = priceAt(scenario, t);
-    const u = seg ? unrealizedPnl(seg.side, seg.entry, seg.notional, price) : 0;
+    const u = seg ? unrealizedPnl(seg.side, seg.entry, seg.notional, price, getGameLeverage(game)) : 0;
     const eq = Math.max(0, game.startBalance + realizedSoFar + u);
     if (eq > peak) peak = eq;
     if (peak > 0) maxDd = Math.max(maxDd, ((peak - eq) / peak) * 100);
@@ -271,7 +271,7 @@ export function closingEvent(
     notional: pos.notional,
     sideAfter: 'FLAT',
     entryPriceAfter: null,
-    realizedPnl: unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price),
+    realizedPnl: unrealizedPnl(pos.side, pos.entryPrice, pos.notional, price, getGameLeverage(game)),
     kind,
   };
 }

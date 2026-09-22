@@ -3,9 +3,36 @@
 export type PositionSide = 'FLAT' | 'LONG' | 'SHORT';
 export type TradeAction = 'LONG' | 'SHORT' | 'CLOSE';
 export type GameStatus = 'COUNTDOWN' | 'LIVE' | 'FINISHED' | 'LIQUIDATED' | 'INVALID';
+export type RunType = 'ranked' | 'challenge' | 'practice' | 'onboarding' | 'ghost';
 export type ResultState = 'PROFITABLE' | 'WICKED' | 'PERSONAL_BEST' | 'TOP_10' | 'LEGENDARY';
 export type ChallengeStatus = 'UPCOMING' | 'LIVE' | 'ENDED';
 export type CardType = 'GAME_RESULT' | 'ALL_TIME';
+export type Leverage = 1 | 2 | 5 | 10 | 20;
+export type RankedDayState = 'PROFITABLE' | 'WICKED' | 'FLAT' | 'NOT_PLAYED';
+
+export interface RankedDay {
+  date: string;
+  state: RankedDayState;
+  score: number | null;
+  pnl: number | null;
+  activeStreak: boolean;
+  today: boolean;
+}
+
+export interface StreakCalendar {
+  days: RankedDay[];
+  currentStreak: number;
+  todayState: RankedDayState;
+  streakAtRisk: boolean;
+  resetAt: string;
+}
+
+export type NearMiss =
+  | { type: 'leaderboard_cutoff'; targetRank: number; pointsAway: number }
+  | { type: 'leaderboard_tie'; targetRank: number }
+  | { type: 'liquidation_survival'; liquidationEquityPercent: number }
+  | { type: 'near_liquidation'; minimumEquityPercent: number }
+  | null;
 
 export interface Candle {
   timestamp: number; // ms offset from game start
@@ -27,6 +54,32 @@ export interface MarketScenario {
   seed: string;
   difficulty: number; // 1..5
   seasonId: string;
+  regimeId?: string;
+  regimeVersion?: number;
+}
+
+export interface MarketRegime {
+  id: string;
+  version: number;
+  name: string;
+  description: string;
+}
+
+export interface DailyRecap {
+  dayKey: string;
+  scenarioId: string;
+  regime: MarketRegime | null;
+  playerCount: number;
+  highScore: number;
+  averageScore: number;
+  biggestWickPercent: number | null;
+  mostUsedDirection: 'LONG' | 'SHORT' | null;
+  profitablePlayerPercent: number | null;
+}
+
+export interface OnboardingStatus {
+  eligible: boolean;
+  activeGameId: string | null;
 }
 
 export interface TradeEvent {
@@ -44,12 +97,27 @@ export interface TradeEvent {
   kind: 'OPEN' | 'CLOSE' | 'FLIP_CLOSE' | 'TIMEOUT_CLOSE' | 'LIQUIDATION_CLOSE';
 }
 
+export interface GhostAction {
+  action: TradeAction;
+  t: number;
+  price: number;
+  kind: TradeEvent['kind'];
+}
+
 export interface Game {
   id: string;
   playerId: string;
   challengeId: string;
   scenarioId: string;
   seasonId: string;
+  /** Missing on pre-migration records, which are treated as ranked. */
+  runType?: RunType;
+  challengeCode?: string;
+  ghostSourceGameId?: string;
+  regimeId?: string;
+  regimeVersion?: number;
+  leverage?: Leverage;
+  rulesVersion?: string;
   mode: string;
   pair: string;
   startsAt: number; // unix ms (server clock, includes countdown)
@@ -68,6 +136,14 @@ export interface GameResult {
   scenarioId: string;
   challengeId: string;
   seasonId: string;
+  /** Missing on pre-migration records, which are treated as ranked. */
+  runType?: RunType;
+  challengeCode?: string;
+  ghostSourceGameId?: string;
+  regimeId?: string;
+  regimeVersion?: number;
+  leverage?: Leverage;
+  rulesVersion?: string;
   mode: string;
   pair: string;
   startBalance: number;
@@ -90,6 +166,38 @@ export interface GameResult {
   liquidated: boolean;
   verified: boolean;
   createdAt: number;
+}
+
+export interface ChallengeRecord {
+  code: string;
+  challengerGameId: string;
+  challengerPlayerId: string;
+  /** Legacy snapshot retained for backwards compatibility; reads use the canonical result reference. */
+  challengerResult: Pick<GameResult, 'score' | 'pnl' | 'roi' | 'liquidated' | 'seasonId' | 'pair' | 'mode'>;
+  challengeId: string;
+  scenarioId: string;
+  seasonId: string;
+  pair: string;
+  leverage?: Leverage;
+  rulesVersion?: string;
+  createdAt: number;
+}
+
+export interface KillCamFrame {
+  t: number;
+  price: number;
+  candles: Candle[];
+  equity: number;
+  pnl: number;
+  unrealized: number;
+  side: PositionSide;
+  entryPrice: number | null;
+  events: TradeEvent[];
+}
+
+export interface KillCamReplay {
+  durationMs: number;
+  frames: KillCamFrame[];
 }
 
 export interface PlayerIdentity {
@@ -126,6 +234,25 @@ export interface PlayerStats {
   history: Array<{ gameId: string; score: number; roi: number; at: number; seasonId: string }>;
 }
 
+export interface BadgeDefinition {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface PlayerBadge extends BadgeDefinition {
+  earned: boolean;
+  progress?: { current: number; target: number };
+}
+
+export interface PlayerAchievements {
+  title: string;
+  archetype: string;
+  badges: PlayerBadge[];
+  newBadgeIds: string[];
+  titleChanged: boolean;
+}
+
 export interface DailyChallenge {
   id: string;
   seasonId: string;
@@ -140,6 +267,7 @@ export interface DailyChallenge {
   leverage: number;
   difficulty: number;
   status: ChallengeStatus;
+  regime: MarketRegime;
 }
 
 export interface LeaderboardRow {

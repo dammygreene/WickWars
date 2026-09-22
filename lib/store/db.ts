@@ -4,11 +4,22 @@ import { randomUUID } from 'crypto';
 import { logError } from '@/lib/server/log';
 import type {
   CardRecord,
+  ChallengeRecord,
   Game,
   GameResult,
   PlayerIdentity,
   PlayerStats,
 } from '@/lib/types';
+
+export function isRankedRun(run: { runType?: string }): boolean {
+  return (run.runType ?? 'ranked') === 'ranked';
+}
+
+/** Only ranked and explicitly shareable practice results may seed challenges. */
+export function canCreateChallenge(run: { runType?: string }): boolean {
+  const runType = run.runType ?? 'ranked';
+  return runType === 'ranked' || runType === 'practice';
+}
 
 /**
  * File-backed store for MVP (JSON, atomic writes, in-process mutex).
@@ -28,8 +39,10 @@ interface DbShape {
   games: Record<string, Game>;
   results: Record<string, GameResult>; // by gameId
   cards: Record<string, CardRecord>;
+  challenges: Record<string, ChallengeRecord>;
   nonces: Record<string, { value: string; exp: number }>;
   analytics: Array<{ e: string; at: number; p?: Record<string, string | number> }>;
+  achievementClaims?: Record<string, string[]>;
 }
 
 const EMPTY: DbShape = {
@@ -40,6 +53,7 @@ const EMPTY: DbShape = {
   games: {},
   results: {},
   cards: {},
+  challenges: {},
   nonces: {},
   analytics: [],
 };
@@ -60,7 +74,7 @@ async function readDb(): Promise<DbShape> {
     const raw = await fs.readFile(DB_FILE, 'utf8');
     const parsed = JSON.parse(raw) as DbShape;
     if (parsed.version !== 1) return structuredClone(EMPTY);
-    return parsed;
+    return { ...parsed, challenges: parsed.challenges ?? {} };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'ENOENT') {
       return structuredClone(EMPTY);
@@ -161,9 +175,48 @@ export async function saveGame(g: Game): Promise<void> {
   });
 }
 
+/** Test-fixture cleanup; never called by product routes. */
+export async function deleteGhostFixture(gameId: string, playerId: string): Promise<void> {
+  await withLock(async () => {
+    const db = await readDb();
+    const ghostGameIds = Object.values(db.games).filter((game) => game.ghostSourceGameId === gameId).map((game) => game.id);
+    delete db.games[gameId];
+    delete db.results[gameId];
+    if (db.achievementClaims) delete db.achievementClaims[gameId];
+    for (const [code, challenge] of Object.entries(db.challenges)) if (challenge.challengerGameId === gameId) delete db.challenges[code];
+    delete db.stats[playerId];
+    delete db.players[playerId];
+    for (const [username, id] of Object.entries(db.usernames)) if (id === playerId) delete db.usernames[username];
+    for (const ghostGameId of ghostGameIds) {
+      const ghost = db.games[ghostGameId];
+      if (ghost) {
+        delete db.stats[ghost.playerId];
+        delete db.players[ghost.playerId];
+        for (const [username, id] of Object.entries(db.usernames)) if (id === ghost.playerId) delete db.usernames[username];
+      }
+      delete db.games[ghostGameId];
+      delete db.results[ghostGameId];
+    }
+    await writeDb(db);
+  });
+}
+
 export async function getGame(id: string): Promise<Game | null> {
   const db = await readDb();
   return db.games[id] ?? null;
+}
+
+export async function claimAchievementUnlocks(gameId: string, badgeIds: string[]): Promise<string[]> {
+  if (!badgeIds.length) return [];
+  return withLock(async () => {
+    const db = await readDb();
+    db.achievementClaims ??= {};
+    const claimed = new Set(db.achievementClaims[gameId] ?? []);
+    const fresh = badgeIds.filter((id) => !claimed.has(id));
+    db.achievementClaims[gameId] = [...claimed, ...fresh];
+    await writeDb(db);
+    return fresh;
+  });
 }
 
 /** Read-only db access for pure computations (no writes, no lock). */
@@ -185,6 +238,13 @@ export async function findActiveGame(playerId: string, graceMs = 120_000): Promi
       (g) => g.playerId === playerId && !g.resultId && g.endsAt > now - graceMs,
     ) ?? null
   );
+}
+
+export async function onboardingStatus(playerId: string): Promise<{ eligible: boolean; activeGameId: string | null }> {
+  const db = await readDb();
+  const active = Object.values(db.games).find((game) => game.playerId === playerId && game.runType === 'onboarding' && !game.resultId);
+  const hasHistory = Object.values(db.games).some((game) => game.playerId === playerId);
+  return { eligible: !hasHistory, activeGameId: active?.id ?? null };
 }
 
 /** Atomic trade append + finish. The mutation fn runs inside the write lock. */
@@ -217,10 +277,28 @@ export async function getResult(gameId: string): Promise<GameResult | null> {
   return db.results[gameId] ?? null;
 }
 
+export async function getChallenge(code: string): Promise<ChallengeRecord | null> {
+  const db = await readDb();
+  return db.challenges[code] ?? null;
+}
+
+export async function getChallengeForGame(gameId: string): Promise<ChallengeRecord | null> {
+  const db = await readDb();
+  return Object.values(db.challenges).find((challenge) => challenge.challengerGameId === gameId) ?? null;
+}
+
+export async function saveChallenge(challenge: ChallengeRecord): Promise<void> {
+  await withLock(async () => {
+    const db = await readDb();
+    db.challenges[challenge.code] = challenge;
+    await writeDb(db);
+  });
+}
+
 export async function resultsForChallenge(challengeId: string): Promise<GameResult[]> {
   const db = await readDb();
   return Object.values(db.results)
-    .filter((r) => r.challengeId === challengeId && r.verified)
+    .filter((r) => r.challengeId === challengeId && r.verified && isRankedRun(r))
     .sort((a, b) => b.score - a.score || a.createdAt - b.createdAt);
 }
 
@@ -232,16 +310,36 @@ export async function resultsForPlayer(playerId: string, limit = 50): Promise<Ga
     .slice(0, limit);
 }
 
+export async function gamesForPlayer(playerId: string, limit = 500): Promise<Game[]> {
+  const db = await readDb();
+  return Object.values(db.games).filter((game) => game.playerId === playerId).sort((a, b) => a.createdAt - b.createdAt).slice(-limit);
+}
+
+export async function rankedResultsForPlayer(playerId: string, since?: number): Promise<GameResult[]> {
+  const db = await readDb();
+  return Object.values(db.results)
+    .filter((result) => result.playerId === playerId && result.verified && isRankedRun(result) && (since == null || result.createdAt >= since))
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function eligibleGhostGames(scenarioId: string, excludePlayerId: string, limit = 8): Promise<Game[]> {
+  const db = await readDb();
+  return Object.values(db.games)
+    .filter((game) => game.scenarioId === scenarioId && game.playerId !== excludePlayerId && (game.runType ?? 'ranked') === 'ranked' && !!game.resultId && !!db.results[game.id]?.verified && game.trades.length > 0)
+    .sort((a, b) => (db.results[b.id]?.score ?? 0) - (db.results[a.id]?.score ?? 0))
+    .slice(0, limit);
+}
+
 export async function playerBestToday(playerId: string, challengeId: string): Promise<GameResult | null> {
   const db = await readDb();
-  const mine = Object.values(db.results).filter((r) => r.playerId === playerId && r.challengeId === challengeId && r.verified);
+  const mine = Object.values(db.results).filter((r) => r.playerId === playerId && r.challengeId === challengeId && r.verified && isRankedRun(r));
   if (!mine.length) return null;
   return mine.sort((a, b) => b.score - a.score)[0];
 }
 
 export async function countChallengeGames(challengeId: string): Promise<{ games: number; players: number }> {
   const db = await readDb();
-  const rs = Object.values(db.results).filter((r) => r.challengeId === challengeId && r.verified);
+  const rs = Object.values(db.results).filter((r) => r.challengeId === challengeId && r.verified && isRankedRun(r));
   return { games: rs.length, players: new Set(rs.map((r) => r.playerId)).size };
 }
 

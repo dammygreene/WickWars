@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import type { Candle, MarketScenario } from '@/lib/types';
 import { GAME_DURATION_MS, TICK_MS } from './constants';
+import type { RegimeConfig } from './regime';
 
 export { TICK_MS, GAME_DURATION_MS, START_BALANCE, LEVERAGE } from './constants';
 
@@ -40,6 +41,7 @@ export interface ScenarioSpec {
   difficulty?: number; // 1..5
   seasonId?: string;
   pair?: string;
+  regime?: RegimeConfig;
 }
 
 export function buildScenario(spec: ScenarioSpec): MarketScenario {
@@ -50,22 +52,23 @@ export function buildScenario(spec: ScenarioSpec): MarketScenario {
   const startingPrice = 100;
 
   // Regime model: 3-5 trend phases across the round + volatility bursts + one wick event.
-  const volBase = 0.0011 + difficulty * 0.00045; // per-tick sigma
+  const regime = spec.regime;
+  const volBase = (0.0011 + difficulty * 0.00045) * (regime?.volatilityScale ?? 1); // per-tick sigma
   const phases: Array<{ from: number; to: number; drift: number; vol: number }> = [];
   const phaseCount = 3 + Math.floor(rand() * 3);
   let cursor = 0;
   for (let i = 0; i < phaseCount; i++) {
     const end = i === phaseCount - 1 ? tickCount : cursor + Math.floor((tickCount / phaseCount) * (0.6 + rand() * 0.8));
-    const drift = (rand() - 0.5) * 2 * (0.0004 + difficulty * 0.00022);
+    const drift = (rand() - 0.5) * 2 * (0.0004 + difficulty * 0.00022) * (regime?.trendScale ?? 1);
     const burst = rand() < 0.45;
-    phases.push({ from: cursor, to: Math.min(end, tickCount), drift, vol: volBase * (burst ? 1.9 : 1) });
+    phases.push({ from: cursor, to: Math.min(end, tickCount), drift, vol: volBase * (burst ? 1.9 : 1) * (regime?.chopScale ?? 1) });
     cursor = end;
   }
 
   // The signature wick: a violent spike + snap-back somewhere mid/late round.
   const wickAt = Math.floor(tickCount * (0.45 + rand() * 0.4));
   const wickDir = rand() < 0.5 ? 1 : -1;
-  const wickMag = (0.02 + rand() * 0.028) * (0.7 + difficulty * 0.15); // 2-5% move
+  const wickMag = (0.02 + rand() * 0.028) * (0.7 + difficulty * 0.15) * (regime?.reversalScale ?? 1); // 2-5% move
 
   const prices: number[] = new Array(tickCount + 1);
   let p = startingPrice;
@@ -95,6 +98,8 @@ export function buildScenario(spec: ScenarioSpec): MarketScenario {
     seed: spec.seed,
     difficulty,
     seasonId: spec.seasonId ?? 'S01',
+    regimeId: regime?.id,
+    regimeVersion: regime?.version,
   };
 }
 

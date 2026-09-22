@@ -8,12 +8,15 @@ import { track } from '@/lib/client/analytics';
 import { usePlayer } from '@/lib/client/usePlayer';
 import { Avatar } from '@/components/ui/Avatar';
 import { CardGenerator } from '@/components/cards/CardGenerator';
+import { StreakCalendar } from '@/components/profile/StreakCalendar';
 import { ErrorState, LoadingState, EmptyState } from '@/components/ui/States';
 import { cn, fmtDuration, fmtPct, fmtSignedMoney, timeAgo } from '@/lib/utils';
-import type { PublicPlayer, CardRecord } from '@/lib/types';
+import type { PublicPlayer, CardRecord, StreakCalendar as StreakCalendarData, PlayerAchievements } from '@/lib/types';
 
 interface Data extends PublicPlayer {
   cards: CardRecord[];
+  streakCalendar: StreakCalendarData;
+  achievements: PlayerAchievements;
 }
 
 export function ProfileView({ username }: { username: string }) {
@@ -122,6 +125,20 @@ export function ProfileView({ username }: { username: string }) {
             <p className="ww-label mt-1">{x.l}</p>
           </div>
         ))}
+      </section>
+
+      <StreakCalendar calendar={data.streakCalendar} />
+
+      <section className="ww-panel mt-6 p-5 sm:p-6" aria-label="Titles and badges">
+        <p className="ww-label">CURRENT TITLE</p>
+        <p className="mt-1 font-display text-2xl font-bold text-ww-text">{data.achievements.title}</p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {data.achievements.badges.map((badge) => (
+            <button key={badge.id} type="button" title={badge.description} aria-label={`${badge.name}: ${badge.earned ? 'earned' : 'locked'}. ${badge.description}`} className={cn('rounded-md border px-3 py-2 text-left font-sans text-xs font-bold', badge.earned ? 'border-ww-win/40 bg-ww-win/10 text-ww-win' : 'border-ww-border bg-ww-bg text-ww-muted')}>
+              {badge.name}{!badge.earned && badge.progress ? ` · ${badge.progress.current}/${badge.progress.target}` : ''}
+            </button>
+          ))}
+        </div>
       </section>
 
       {s.games === 0 ? (

@@ -1,5 +1,5 @@
 import { todayChallenge, seasonConfig } from '@/lib/game/challenge';
-import { getPlayer, withDb } from '@/lib/store/db';
+import { getPlayer, isRankedRun, withDb } from '@/lib/store/db';
 import type { GameResult, LeaderboardRow } from '@/lib/types';
 import { currentPlayer } from '@/lib/auth/session';
 import { ok, failFrom } from '@/lib/api/json';
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
 
     const results: GameResult[] = await withDb((db) => Object.values(db.results));
-    const verified = results.filter((r) => r.verified);
+    const verified = results.filter((r) => r.verified && isRankedRun(r));
 
     const challenge = todayChallenge();
     const season = seasonConfig();

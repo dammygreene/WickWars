@@ -1,10 +1,12 @@
 import type { DbShape } from '@/lib/store/db';
-import type { Game, GameResult, MarketScenario, TradeEvent } from '@/lib/types';
+import type { Game, GameResult, GhostAction, MarketScenario, TradeEvent } from '@/lib/types';
 import { buildScenario, candlesUpTo, priceAt } from './scenario';
 import { challengeForDay } from './challenge';
 import { equityAt, LIQUIDATION_EQUITY_RATIO } from './engine';
 import { calculateScore } from './scoring';
 import { finalizeLocked } from './finish';
+import { buildOnboardingScenario } from './onboarding';
+import { regimeById } from './regime';
 
 export interface TickSnapshot {
   status: 'COUNTDOWN' | 'LIVE' | 'FINISHED' | 'LIQUIDATED';
@@ -23,13 +25,16 @@ export interface TickSnapshot {
   provisionalRank: number | null;
   rankTotal: number;
   events: TradeEvent[];
+  ghostEvents: GhostAction[];
   result: GameResult | null;
 }
 
 export function scenarioForGame(game: Game): MarketScenario {
+  if (game.runType === 'onboarding') return buildOnboardingScenario();
   const day = game.challengeId.slice(game.seasonId.length + 1);
   const ch = challengeForDay(day);
-  return buildScenario({ scenarioId: game.scenarioId, seed: game.scenarioId, seasonId: game.seasonId, difficulty: ch.difficulty });
+    const regime = game.regimeId && game.regimeVersion ? regimeById(game.regimeId, game.regimeVersion) ?? undefined : undefined;
+    return buildScenario({ scenarioId: game.scenarioId, seed: game.scenarioId, seasonId: game.seasonId, difficulty: ch.difficulty, regime });
 }
 
 /**
@@ -67,6 +72,7 @@ export function computeTick(db: DbShape, game: Game, now: number, commit: boolea
       provisionalRank: null,
       rankTotal: 0,
       events: [],
+      ghostEvents: [],
       result: null,
     };
   }
@@ -127,8 +133,18 @@ function liveSnapshot(db: DbShape, game: Game, scenario: MarketScenario, t: numb
     provisionalRank: board.length ? 1 + board.filter((r) => r.score > total).length : 1,
     rankTotal: board.length + 1,
     events: game.trades,
+    ghostEvents: ghostEventsAt(db, game, t),
     result: null,
   };
+}
+
+function ghostEventsAt(db: DbShape, game: Game, t: number): GhostAction[] {
+  if (game.runType !== 'ghost' || !game.ghostSourceGameId) return [];
+  const source = db.games[game.ghostSourceGameId];
+  if (!source || source.runType !== 'ranked') return [];
+  return source.trades
+    .filter((event) => event.t <= t && (event.action === 'LONG' || event.action === 'SHORT' || event.action === 'CLOSE'))
+    .map((event) => ({ action: event.action, t: event.t, price: event.price, kind: event.kind }));
 }
 
 /** Read-only finished snapshot (no db access) for already-finalized runs. */
@@ -155,6 +171,7 @@ function finishedSnapshot(game: Game, scenario: MarketScenario, r: GameResult, n
     provisionalRank: r.rank,
     rankTotal: r.rankTotal,
     events: game.trades,
+    ghostEvents: [],
     result: r,
   };
 }

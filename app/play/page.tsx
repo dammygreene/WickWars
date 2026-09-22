@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useGame } from '@/lib/client/useGame';
 import { usePlayer } from '@/lib/client/usePlayer';
@@ -21,14 +21,39 @@ import type { DailyChallenge } from '@/lib/types';
 export default function PlayPage() {
   const { player, loading: authLoading } = usePlayer();
   const game = useGame();
+  const resumeGame = game.resume;
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const practice = searchParams.get('mode') === 'practice';
+  const challengeCode = searchParams.get('challenge');
+  const ghostMode = searchParams.get('mode') === 'ghost';
+  const resumeGameId = searchParams.get('game');
   const [authOpen, setAuthOpen] = useState(false);
   const [brief, setBrief] = useState<null | {
     challenge: DailyChallenge;
     myBest: { score: number; rank: number } | null;
     topScore: number | null;
   }>(null);
+  const [onboarding, setOnboarding] = useState<{ eligible: boolean; activeGameId: string | null } | null>(null);
+  const [ghosts, setGhosts] = useState<Array<{ gameId: string; username: string; score: number; pnl: number }>>([]);
+  const [selectedGhost, setSelectedGhost] = useState<string | null>(null);
+  const [practiceLeverage, setPracticeLeverage] = useState(10);
   const [sound, setSoundUi] = useState(false);
+  const resumedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (challengeCode || practice || ghostMode) return;
+    api<{ eligible: boolean; activeGameId: string | null }>('/api/onboarding')
+      .then(setOnboarding)
+      .catch(() => setOnboarding({ eligible: false, activeGameId: null }));
+  }, [challengeCode, ghostMode, practice]);
+
+  useEffect(() => {
+    if (!ghostMode) return;
+    api<{ ghosts: Array<{ gameId: string; username: string; score: number; pnl: number }> }>('/api/ghosts')
+      .then((data) => setGhosts(data.ghosts))
+      .catch(() => setGhosts([]));
+  }, [ghostMode]);
 
   useEffect(() => {
     setSoundUi(isSoundOn());
@@ -36,14 +61,49 @@ export default function PlayPage() {
   }, []);
 
   useEffect(() => {
-    api<{
-      challenge: DailyChallenge;
-      top: Array<{ score: number }>;
-      myBest: { score: number; rank: number } | null;
-    }>('/api/challenge/today')
+    if (challengeCode) {
+      api<{
+        pair: string;
+        seasonId: string;
+        mode: string;
+        regime: DailyChallenge['regime'];
+        durationMs: number;
+        startingBalance: number;
+        leverage: number;
+      }>(`/api/challenges/${challengeCode}`)
+        .then((d) => setBrief({
+          challenge: {
+            id: challengeCode,
+            seasonId: d.seasonId,
+            name: 'Challenge Wick',
+            mode: d.mode,
+            pair: d.pair,
+            startsAt: new Date().toISOString(),
+            endsAt: new Date(Date.now() + 86_400_000).toISOString(),
+            scenarioId: challengeCode,
+            startingBalance: d.startingBalance,
+            durationMs: d.durationMs,
+            leverage: d.leverage,
+            difficulty: 3,
+            status: 'LIVE',
+            regime: d.regime,
+          },
+          myBest: null,
+          topScore: null,
+        }))
+        .catch(() => setBrief(null));
+      return;
+    }
+    api<{ challenge: DailyChallenge; top: Array<{ score: number }>; myBest: { score: number; rank: number } | null }>('/api/challenge/today')
       .then((d) => setBrief({ challenge: d.challenge, myBest: d.myBest, topScore: d.top[0]?.score ?? null }))
       .catch(() => setBrief(null));
-  }, []);
+  }, [challengeCode]);
+
+  useEffect(() => {
+    if (!player || !resumeGameId || resumedRef.current === resumeGameId) return;
+    resumedRef.current = resumeGameId;
+    void resumeGame(resumeGameId);
+  }, [player, resumeGame, resumeGameId]);
 
   // Redirect to the result screen when the run ends.
   useEffect(() => {
@@ -101,22 +161,25 @@ export default function PlayPage() {
   }
 
   if (game.phase === 'brief') {
+    const onboardingMode = !challengeCode && !practice && !ghostMode && onboarding?.eligible;
+    const onboardingResume = !challengeCode && !practice && onboarding?.activeGameId;
     return (
       <div className="ww-container max-w-2xl py-8 sm:py-12">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
           <div className="flex items-center justify-between">
-            <p className="ww-mono text-xs font-semibold tracking-[0.18em] text-ww-win">DAILY WICK · {brief?.challenge.seasonId ?? 'S01'}</p>
+            <p className="ww-mono text-xs font-semibold tracking-[0.18em] text-ww-win">{ghostMode ? 'GHOST DUEL' : onboardingMode || onboardingResume ? 'FIRST WICK' : challengeCode ? 'CHALLENGE WICK' : practice ? 'PRACTICE RUN' : 'DAILY WICK'} · {brief?.challenge.seasonId ?? 'S01'}</p>
             {brief && <CountdownChip targetMs={new Date(brief.challenge.endsAt).getTime()} />}
           </div>
-          <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-ww-text sm:text-5xl">READY?</h1>
+          <h1 className="mt-3 font-display text-4xl font-bold tracking-tight text-ww-text sm:text-5xl">{onboardingMode || onboardingResume ? 'LEARN THE WICK.' : 'READY?'}</h1>
           <p className="mt-2 font-sans text-[15px] text-ww-secondary">
-            @{player.username} · {fmtMoney(brief?.challenge.startingBalance ?? 10000, 0)} virtual · 10x leverage · 45 seconds.
+            {onboardingMode || onboardingResume ? 'A short guided round. Try a direction, watch your equity, and feel the reversal.' : `@${player.username} · ${fmtMoney(brief?.challenge.startingBalance ?? 10000, 0)} virtual · 10x leverage · 45 seconds.`}
           </p>
 
           <div className="ww-panel mt-6 grid grid-cols-2 divide-x divide-ww-border sm:grid-cols-4">
             {[
-              { l: 'DURATION', v: '45s' },
+              { l: 'DURATION', v: onboardingMode || onboardingResume ? '20s' : '45s' },
               { l: 'PAIR', v: brief?.challenge.pair ?? 'WICK/USD' },
+              ...(!onboardingMode && !onboardingResume ? [{ l: 'REGIME', v: brief?.challenge.regime?.name ?? '—' }] : []),
               { l: 'TOP TODAY', v: brief?.topScore != null ? brief.topScore.toLocaleString() : '—' },
               { l: 'YOUR BEST', v: brief?.myBest ? `#${brief.myBest.rank} · ${brief.myBest.score.toLocaleString()}` : '—' },
             ].map((s) => (
@@ -133,11 +196,18 @@ export default function PlayPage() {
             </p>
           )}
 
-          <Button size="xl" className="mt-6 w-full font-display text-lg font-bold tracking-wide" onClick={game.start}>
-            START ROUND
+          {ghostMode && ghosts.length > 0 && (
+            <div className="mt-5 grid gap-2" aria-label="Choose a ghost">
+              {ghosts.map((ghost) => <button key={ghost.gameId} type="button" onClick={() => setSelectedGhost(ghost.gameId)} className={cn('rounded-lg border px-4 py-3 text-left', selectedGhost === ghost.gameId ? 'border-ww-win bg-ww-win/10' : 'border-ww-border bg-ww-surface')}><span className="font-display font-bold text-ww-text">@{ghost.username}</span><span className="ww-mono ml-3 text-xs text-ww-secondary">{ghost.score.toLocaleString()} SCORE</span></button>)}
+            </div>
+          )}
+          {ghostMode && ghosts.length === 0 && <p className="mt-5 rounded-lg border border-ww-border bg-ww-surface px-4 py-3 text-center font-sans text-sm text-ww-muted">NO GHOSTS AVAILABLE YET. Complete today&apos;s Wick and come back when more verified runs are available.</p>}
+          {practice && <div className="mt-5" aria-label="Practice leverage selector"><p className="ww-label">LEVERAGE · PRACTICE ONLY</p><div className="mt-2 grid grid-cols-5 gap-1.5">{[1,2,5,10,20].map((value) => <button key={value} type="button" aria-label={`${value}x leverage, practice`} aria-pressed={practiceLeverage === value} onClick={() => setPracticeLeverage(value)} className={cn('rounded-md border px-1 py-2 font-mono text-sm font-bold', practiceLeverage === value ? 'border-ww-win bg-ww-win/10 text-ww-win' : 'border-ww-border bg-ww-surface text-ww-secondary')}>{value}x</button>)}</div><p className="mt-2 text-center font-sans text-xs text-ww-muted">{practiceLeverage === 1 ? 'LOWER LIQUIDATION RISK' : practiceLeverage === 20 ? 'HIGHER LIQUIDATION RISK' : practiceLeverage === 5 ? 'BALANCED' : 'STANDARD'}</p></div>}
+          <Button size="xl" className="mt-6 w-full font-display text-lg font-bold tracking-wide" disabled={ghostMode && !selectedGhost} onClick={() => onboardingResume ? void game.resume(onboardingResume) : game.start(ghostMode ? 'ghost' : onboardingMode ? 'onboarding' : challengeCode ? 'challenge' : practice ? 'practice' : 'ranked', challengeCode ?? undefined, selectedGhost ?? undefined, practice ? practiceLeverage : 10)}>
+            {ghostMode ? 'START GHOST DUEL' : onboardingResume ? 'RESUME FIRST WICK' : onboardingMode ? 'START FIRST WICK' : challengeCode ? 'ACCEPT CHALLENGE' : practice ? 'START PRACTICE' : 'START ROUND'}
           </Button>
           <p className="mt-3 text-center font-sans text-[13px] text-ww-muted">
-            LONG / SHORT / CLOSE · Keyboard: L · S · C · Sound is off by default.
+            {onboardingMode || onboardingResume ? 'LONG / SHORT / CLOSE · Watch how leverage changes your equity.' : ghostMode ? 'Choose a verified player. Their actions reveal on the live timeline.' : 'LONG / SHORT / CLOSE · Keyboard: L · S · C · Sound is off by default.'}
           </p>
         </motion.div>
       </div>
@@ -171,7 +241,7 @@ export default function PlayPage() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="live-dot inline-block h-2 w-2 rounded-full bg-ww-win" aria-hidden />
-          <span className="ww-mono text-xs font-semibold tracking-[0.14em] text-ww-secondary">{game.game?.mode ?? 'DAILY WICK'}</span>
+          <span className="ww-mono text-xs font-semibold tracking-[0.14em] text-ww-secondary">{game.game?.mode ?? 'DAILY WICK'} · {game.game?.leverage ?? 10}x</span>
         </div>
         <button
           onClick={() => setSound(!sound)}

@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import type { Game, GameResult, PlayerIdentity, PlayerStats } from '@/lib/types';
 import { buildScenario } from '@/lib/game/scenario';
 import { challengeForDay } from '@/lib/game/challenge';
+import { regimeById, regimeForDay } from '@/lib/game/regime';
 import { getGame, getPlayer, getResult, getStats, findCardByRev, newId, saveCard } from '@/lib/store/db';
 import { loadTemplate } from './templates';
 import { replaceFullTextToken, replaceToken } from './text';
@@ -61,11 +62,13 @@ export async function gameResultCard(gameId: string): Promise<{ cardId: string; 
   const existing = await findCardByRev(player.playerId, 'GAME_RESULT', dataRev);
   if (existing) return { cardId: existing.id, cached: true };
 
+  const storedRegime = game.regimeId && game.regimeVersion ? regimeById(game.regimeId, game.regimeVersion) : undefined;
   const scenario = buildScenario({
     scenarioId: game.scenarioId,
     seed: game.scenarioId,
     seasonId: game.seasonId,
     difficulty: challenge.difficulty,
+    regime: storedRegime ?? (game.regimeId ? regimeForDay(result.challengeId.slice(result.seasonId.length + 1)) : undefined),
   });
 
   const won = result.pnl >= 0;

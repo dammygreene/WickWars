@@ -33,7 +33,7 @@ export interface ScoreInput {
   wins: number;
   maxDrawdownPct: number;
   liquidated: boolean;
-  streakBefore: number; // consecutive profitable games before this one
+  streakBefore: number; // consecutive profitable UTC days before this result
   profitable: boolean;
 }
 

@@ -6,16 +6,27 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { CardGenerator } from '@/components/cards/CardGenerator';
+import { KillCamReplay } from '@/components/results/KillCamReplay';
+import type { PlayerAchievements } from '@/lib/types';
+import { ChallengeButton } from '@/components/results/ChallengeButton';
+import { PlayAgainButton } from '@/components/results/PlayAgainButton';
 import { api } from '@/lib/client/api';
 import { track } from '@/lib/client/analytics';
 import { usePlayer } from '@/lib/client/usePlayer';
 import { LoadingState, ErrorState } from '@/components/ui/States';
 import { cn, fmtDuration, fmtMoney, fmtPct, fmtSignedMoney } from '@/lib/utils';
-import type { GameResult } from '@/lib/types';
+import type { GameResult, KillCamReplay as KillCamReplayData, NearMiss } from '@/lib/types';
 
 interface Data {
   result: GameResult;
   game: { id: string; mode: string; pair: string };
+  replay: KillCamReplayData | null;
+  challenge: { code: string; outcome: 'opponent_won' | 'challenger_won' | 'tie'; scoreDifference: number; challenger: { username: string; score: number; pnl: number; liquidated: boolean } } | null;
+  ghost: { username: string; score: number; pnl: number; liquidated: boolean } | null;
+  achievements: PlayerAchievements;
+  streak: { current: number; rankedResult: boolean; updated: boolean };
+  nearMiss: NearMiss;
+  regime: { id: string; version: number; name: string; description: string } | null;
   player: { username: string; avatarUrl?: string; title: string } | null;
 }
 
@@ -85,6 +96,9 @@ export function ResultView({ gameId }: { gameId: string }) {
   const won = r.pnl >= 0;
   const tag = TAG_COPY[r.resultState] ?? TAG_COPY[won ? 'PROFITABLE' : 'WICKED'];
   const isMine = player?.playerId === r.playerId;
+  const isChallenge = r.runType === 'challenge';
+  const isOnboarding = r.runType === 'onboarding';
+  const isGhost = r.runType === 'ghost';
   const shareText = won
     ? `${fmtPct(r.roi)} in today's WICK WARS daily. Rank #${r.rank}. Think you can beat it?`
     : `I got wicked. Again. ${fmtPct(r.roi)} on today's WICK WARS daily.`;
@@ -113,6 +127,9 @@ export function ResultView({ gameId }: { gameId: string }) {
           ({r.roi >= 0 ? '▲' : '▼'} {fmtPct(r.roi).replace('+', '')})
         </motion.p>
         {r.liquidated && <p className="ww-label mt-2 !text-ww-loss">LIQUIDATED · POSITION CLOSED BY THE HOUSE</p>}
+        {isOnboarding && <p className="ww-label mt-2 !text-ww-muted">ONBOARDING · NOT RANKED</p>}
+        {data.regime && <p className="ww-mono mt-2 text-xs font-bold tracking-[0.16em] text-ww-secondary">{data.regime.name}</p>}
+        <p className="ww-mono mt-1 text-xs font-bold tracking-[0.16em] text-ww-muted">{isChallenge || isOnboarding || isGhost ? r.mode : (r.runType ?? 'ranked').toUpperCase()} · {r.leverage ?? 10}x</p>
       </motion.div>
 
       <motion.div
@@ -122,18 +139,70 @@ export function ResultView({ gameId }: { gameId: string }) {
         className="ww-panel mt-8 grid grid-cols-2 divide-x divide-ww-border"
       >
         <div className="px-4 py-5 text-center">
-          <p className="ww-label">Final score</p>
-          <p className="mt-1 font-display text-4xl font-bold text-ww-text">{r.score.toLocaleString()}</p>
+          <p className="ww-label">{isOnboarding ? 'Lesson run' : 'Final score'}</p>
+          <p className="mt-1 font-display text-4xl font-bold text-ww-text">{isOnboarding ? '—' : r.score.toLocaleString()}</p>
         </div>
         <div className="px-4 py-5 text-center">
-          <p className="ww-label">Rank today</p>
-          <p className="mt-1 font-display text-4xl font-bold text-ww-text">
-            #{r.rank} <span className="text-lg text-ww-muted">/ {r.rankTotal}</span>
-          </p>
+            <p className="ww-label">{isOnboarding || isChallenge ? 'Run type' : 'Rank today'}</p>
+            <p className="mt-1 font-display text-4xl font-bold text-ww-text">
+              {isOnboarding ? 'LEARN' : isChallenge ? 'DUEL' : <>#{r.rank} <span className="text-lg text-ww-muted">/ {r.rankTotal}</span></>}
+            </p>
         </div>
       </motion.div>
 
-      <motion.div
+      {r.liquidated && data.replay && <KillCamReplay replay={data.replay} result={r} />}
+
+      {isChallenge && data.challenge && (
+        <div className="ww-panel mt-3 border-ww-win/30 p-5 text-center sm:p-6">
+          <p className="ww-label !text-ww-win">HEAD-TO-HEAD</p>
+          <p className="mt-2 font-display text-2xl font-bold text-ww-text">
+            {data.challenge.outcome === 'opponent_won' ? 'YOU BEAT' : data.challenge.outcome === 'challenger_won' ? 'THEY BEAT YOU' : 'TIE GAME'}
+          </p>
+          <p className="mt-1 font-sans text-sm text-ww-secondary">
+            @{data.challenge.challenger.username} · {data.challenge.scoreDifference.toLocaleString()} points {data.challenge.outcome === 'tie' ? '' : 'difference'}
+          </p>
+        </div>
+      )}
+      {isGhost && data.ghost && (
+        <div className="ww-panel mt-3 border-ww-border-strong p-5 text-center sm:p-6">
+          <p className="ww-label">GHOST DUEL</p>
+          <p className="mt-2 font-display text-2xl font-bold text-ww-text">{r.score > data.ghost.score ? 'YOU BEAT' : r.score < data.ghost.score ? 'GHOST BEAT YOU' : 'TIE GAME'}</p>
+          <p className="mt-1 font-sans text-sm text-ww-secondary">@{data.ghost.username} · {Math.abs(r.score - data.ghost.score).toLocaleString()} points difference</p>
+        </div>
+      )}
+
+      <div className="mt-3 text-center" aria-live="polite">
+        {isOnboarding ? (
+          <p className="ww-mono text-xs tracking-[0.16em] text-ww-muted">RANKED PROGRESS UNCHANGED</p>
+        ) : data.streak.rankedResult ? (
+          <p className="ww-mono text-xs font-bold tracking-[0.16em] text-ww-win">{data.streak.current > 0 ? `🔥 ${data.streak.current} DAY STREAK` : 'STREAK BROKEN'}</p>
+        ) : (
+          <p className="ww-mono text-xs tracking-[0.16em] text-ww-muted">RANKED STREAK UNCHANGED · {data.streak.current} DAYS</p>
+        )}
+      </div>
+
+      {!isOnboarding && data.nearMiss && (
+        <p className={cn('mt-3 text-center font-sans text-sm font-semibold tracking-[0.08em]', data.nearMiss.type === 'liquidation_survival' || data.nearMiss.type === 'near_liquidation' ? 'text-ww-loss' : 'text-ww-secondary')}>
+          {data.nearMiss.type === 'leaderboard_cutoff'
+            ? `${data.nearMiss.pointsAway} POINTS FROM #${data.nearMiss.targetRank}`
+            : data.nearMiss.type === 'leaderboard_tie'
+              ? `TIED WITH #${data.nearMiss.targetRank}`
+              : data.nearMiss.type === 'liquidation_survival'
+                ? `LIQUIDATED AT ${data.nearMiss.liquidationEquityPercent.toFixed(1)}% EQUITY`
+                : `YOU DROPPED TO ${data.nearMiss.minimumEquityPercent.toFixed(1)}% EQUITY`}
+        </p>
+      )}
+
+      {data.achievements.newBadgeIds.length > 0 && (
+        <div className="mt-3 text-center" role="status" aria-live="polite">
+          <p className="ww-label !text-ww-win">BADGE UNLOCKED</p>
+          <p className="mt-1 font-display text-lg font-bold text-ww-text">{data.achievements.badges.filter((badge) => data.achievements.newBadgeIds.includes(badge.id)).map((badge) => badge.name).join(' · ')}</p>
+        </div>
+      )}
+
+      {isMine && !isOnboarding && <div className="mt-5"><PlayAgainButton sourceRunType={r.runType} /></div>}
+
+      {!isOnboarding && <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.25 }}
@@ -152,18 +221,23 @@ export function ResultView({ gameId }: { gameId: string }) {
             <p className="ww-label mt-1">{s.l}</p>
           </div>
         ))}
-      </motion.div>
+      </motion.div>}
 
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.35 }} className="ww-panel mt-6 p-5 sm:p-6">
+      {isOnboarding ? (
+        <div className="ww-panel mt-6 border-ww-win/30 p-5 text-center sm:p-6">
+          <p className="ww-label !text-ww-win">{r.liquidated ? "THAT'S WHAT GETTING WICKED LOOKS LIKE." : 'ONBOARDING COMPLETE'}</p>
+          <p className="mt-2 font-sans text-sm text-ww-secondary">{r.liquidated ? 'Leverage can move your equity fast when price turns.' : 'You survived your first Wick.'}</p>
+          <Link href="/play" className="mt-5 block"><Button size="lg" className="w-full font-bold tracking-wide">PLAY FOR REAL</Button></Link>
+        </div>
+      ) : <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.35 }} className="ww-panel mt-6 p-5 sm:p-6">
         <CardGenerator mode="game" gameId={gameId} shareText={shareText} />
-      </motion.div>
+      </motion.div>}
+
+      {isMine && !isChallenge && !isOnboarding && <div className="mt-4"><ChallengeButton gameId={gameId} /></div>}
+      {isMine && !isGhost && !isOnboarding && <Link href="/play?mode=ghost" className="mt-4 block"><Button size="lg" variant="secondary" className="w-full font-bold">GHOST DUEL</Button></Link>}
 
       <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
-        <Link href="/play" className="flex-1" onClick={() => track('replay_clicked')}>
-          <Button size="lg" className="w-full font-bold tracking-wide">
-            {isMine ? 'RUN IT BACK' : 'PLAY WICK'}
-          </Button>
-        </Link>
+        {!isMine && <Link href="/play" className="flex-1" onClick={() => track('replay_clicked')}><Button size="lg" className="w-full font-bold tracking-wide">PLAY WICK</Button></Link>}
         {rp && (
           <Link href={`/profile/${rp.username}`} className="flex-1">
             <Button size="lg" variant="secondary" className="w-full font-semibold">

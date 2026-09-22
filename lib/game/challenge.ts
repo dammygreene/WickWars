@@ -1,5 +1,6 @@
 import type { DailyChallenge } from '@/lib/types';
 import { GAME_DURATION_MS, START_BALANCE, LEVERAGE } from './constants';
+import { publicRegime, regimeForDay } from './regime';
 
 export function seasonConfig() {
   return {
@@ -30,6 +31,7 @@ export function difficultyForDay(key: string): number {
 
 export function challengeForDay(key: string): DailyChallenge {
   const season = seasonConfig();
+  const regime = regimeForDay(key);
   const { start, end } = dayBounds(key);
   const now = Date.now();
   const status = now < start.getTime() ? 'UPCOMING' : now >= end.getTime() ? 'ENDED' : 'LIVE';
@@ -47,6 +49,7 @@ export function challengeForDay(key: string): DailyChallenge {
     leverage: LEVERAGE,
     difficulty: difficultyForDay(key),
     status,
+    regime: publicRegime(regime),
   };
 }
 

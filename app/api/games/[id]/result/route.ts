@@ -4,6 +4,7 @@ import { scenarioForGame } from '@/lib/game/tick';
 import { dailyStreakFromResults } from '@/lib/game/streak';
 import { nearMissForResult } from '@/lib/game/nearMiss';
 import { publicRegime, regimeById } from '@/lib/game/regime';
+import { generateMarketActorPlan, summarizeMarketActors, type PublicMarketActorSummary } from '@/lib/game/actors';
 import { deriveAchievements } from '@/lib/auth/achievements';
 import { ok, fail, failFrom } from '@/lib/api/json';
 
@@ -32,6 +33,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const rankedResult = (result.runType ?? 'ranked') === 'ranked';
     const resolvedRegime = game.regimeId && game.regimeVersion ? regimeById(game.regimeId, game.regimeVersion) : null;
     const regime = resolvedRegime ? publicRegime(resolvedRegime) : null;
+
+    let marketActivity: PublicMarketActorSummary | null = null;
+    if (scenario.marketActorsVersion === 'v1' && game.runType !== 'onboarding') {
+      const plan = generateMarketActorPlan({
+        seed: scenario.seed,
+        durationMs: scenario.durationMs,
+        regime: resolvedRegime ?? undefined,
+      });
+      marketActivity = summarizeMarketActors(plan);
+    }
+
     return ok({
       result,
       leverage: result.leverage ?? 10,
@@ -39,6 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       replay,
       nearMiss,
       regime,
+      marketActivity,
       streak: {
         current: dailyStreakFromResults(rankedHistory),
         rankedResult,

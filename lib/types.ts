@@ -56,6 +56,7 @@ export interface MarketScenario {
   seasonId: string;
   regimeId?: string;
   regimeVersion?: number;
+  marketActorsVersion?: string;
 }
 
 export interface MarketRegime {
@@ -116,6 +117,7 @@ export interface Game {
   ghostSourceGameId?: string;
   regimeId?: string;
   regimeVersion?: number;
+  marketActorsVersion?: string;
   leverage?: Leverage;
   rulesVersion?: string;
   mode: string;
@@ -142,6 +144,7 @@ export interface GameResult {
   ghostSourceGameId?: string;
   regimeId?: string;
   regimeVersion?: number;
+  marketActorsVersion?: string;
   leverage?: Leverage;
   rulesVersion?: string;
   mode: string;
@@ -178,6 +181,9 @@ export interface ChallengeRecord {
   scenarioId: string;
   seasonId: string;
   pair: string;
+  regimeId?: string;
+  regimeVersion?: number;
+  marketActorsVersion?: string;
   leverage?: Leverage;
   rulesVersion?: string;
   createdAt: number;

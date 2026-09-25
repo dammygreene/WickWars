@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       const now = Date.now();
       const game: Game = {
         id: newId('g'), playerId: me.playerId, challengeId: daily.id, scenarioId: daily.scenarioId, seasonId: daily.seasonId,
-        runType: 'ghost', ghostSourceGameId: source.id, regimeId: daily.regime.id, regimeVersion: daily.regime.version, leverage: source.leverage ?? 10, rulesVersion: source.rulesVersion ?? DEFAULT_RULES_VERSION, mode: 'GHOST DUEL', pair: daily.pair, startsAt: now + COUNTDOWN_MS,
+        runType: 'ghost', ghostSourceGameId: source.id, regimeId: source.regimeId ?? daily.regime.id, regimeVersion: source.regimeVersion ?? daily.regime.version, marketActorsVersion: source.marketActorsVersion ?? 'v1', leverage: source.leverage ?? 10, rulesVersion: source.rulesVersion ?? DEFAULT_RULES_VERSION, mode: 'GHOST DUEL', pair: daily.pair, startsAt: now + COUNTDOWN_MS,
         endsAt: now + COUNTDOWN_MS + daily.durationMs, startBalance: daily.startingBalance, status: 'COUNTDOWN', trades: [], createdAt: now,
       };
       await saveGame(game);
@@ -72,6 +72,7 @@ export async function POST(req: Request) {
     }
     const shared = body.challengeCode ? await getChallenge(body.challengeCode) : null;
     let sharedRegime: ReturnType<typeof publicRegime> | undefined;
+    let sharedMarketActorsVersion: string | undefined;
     if (body.challengeCode && !shared) return fail('CHALLENGE_NOT_FOUND', 'That challenge link is invalid or expired.', 404);
     if (shared) {
       const original = await getGame(shared.challengerGameId);
@@ -83,6 +84,7 @@ export async function POST(req: Request) {
         const regime = regimeById(original.regimeId, original.regimeVersion);
         if (regime) sharedRegime = publicRegime(regime);
       }
+      sharedMarketActorsVersion = original.marketActorsVersion ?? shared.marketActorsVersion;
     }
     if (!body.challengeCode && daily.status !== 'LIVE') {
       return fail('CHALLENGE_NOT_LIVE', "Today's wick isn't live — new rounds drop at 00:00 UTC.", 409);
@@ -90,8 +92,8 @@ export async function POST(req: Request) {
     if (!body.challengeCode && requestedLeverage !== (practice ? requestedLeverage : 10)) return fail('INVALID_LEVERAGE', 'Ranked Daily Wick is fixed at 10x.', 400);
     if (shared && hasLeverage && requestedLeverage !== (shared.leverage ?? 10)) return fail('INVALID_LEVERAGE', 'Challenge leverage must match the source run.', 400);
     const challenge = shared
-      ? { id: shared.challengeId, seasonId: shared.seasonId, scenarioId: shared.scenarioId, pair: shared.pair, durationMs: daily.durationMs, leverage: shared.leverage ?? 10, startingBalance: daily.startingBalance, mode: 'CHALLENGE', regime: sharedRegime }
-      : daily;
+      ? { id: shared.challengeId, seasonId: shared.seasonId, scenarioId: shared.scenarioId, pair: shared.pair, durationMs: daily.durationMs, leverage: shared.leverage ?? 10, startingBalance: daily.startingBalance, mode: 'CHALLENGE', regime: sharedRegime, marketActorsVersion: sharedMarketActorsVersion }
+      : { ...daily, marketActorsVersion: 'v1' };
 
     // One live run per player. An in-flight game is returned in the exact
     // "created game" shape so the client transparently resumes it instead of
@@ -127,6 +129,7 @@ export async function POST(req: Request) {
       challengeCode: body.challengeCode,
       regimeId: challenge.regime?.id,
       regimeVersion: challenge.regime?.version,
+      marketActorsVersion: challenge.marketActorsVersion ?? 'v1',
       leverage: challengeRun ? (parseLeverage(challenge.leverage) ?? 10) : practice ? requestedLeverage : 10,
       rulesVersion: DEFAULT_RULES_VERSION,
       mode: challengeRun ? 'CHALLENGE' : practice ? 'PRACTICE' : challenge.mode,

@@ -71,13 +71,13 @@ describe('streak calendar', () => {
 
   it('counts one profitable day once even when multiple profitable results exist', () => {
     const results = [result('2026-09-21', 100), result('2026-09-21', 200)];
-    expect(dailyStreakFromResults(results)).toBe(1);
+    expect(dailyStreakFromResults(results, new Date('2026-09-22T12:00:00.000Z'))).toBe(1);
     expect(dailyStreakBefore(results, new Date('2026-09-22T12:00:00.000Z'))).toBe(1);
   });
 
   it('resets on a losing authoritative day and resumes on consecutive profitable days', () => {
     const results = [result('2026-09-20', 100), result('2026-09-21', -50), result('2026-09-22', 250)];
-    expect(dailyStreakFromResults(results)).toBe(1);
+    expect(dailyStreakFromResults(results, new Date('2026-09-22T23:00:00.000Z'))).toBe(1);
     expect(dailyStreakBefore(results, new Date('2026-09-22T23:00:00.000Z'))).toBe(0);
   });
 

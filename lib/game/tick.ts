@@ -33,8 +33,15 @@ export function scenarioForGame(game: Game): MarketScenario {
   if (game.runType === 'onboarding') return buildOnboardingScenario();
   const day = game.challengeId.slice(game.seasonId.length + 1);
   const ch = challengeForDay(day);
-    const regime = game.regimeId && game.regimeVersion ? regimeById(game.regimeId, game.regimeVersion) ?? undefined : undefined;
-    return buildScenario({ scenarioId: game.scenarioId, seed: game.scenarioId, seasonId: game.seasonId, difficulty: ch.difficulty, regime });
+  const regime = game.regimeId && game.regimeVersion ? regimeById(game.regimeId, game.regimeVersion) ?? undefined : undefined;
+  return buildScenario({
+    scenarioId: game.scenarioId,
+    seed: game.scenarioId,
+    seasonId: game.seasonId,
+    difficulty: ch.difficulty,
+    regime,
+    marketActorsVersion: game.marketActorsVersion,
+  });
 }
 
 /**

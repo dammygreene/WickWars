@@ -16,6 +16,7 @@ import { usePlayer } from '@/lib/client/usePlayer';
 import { LoadingState, ErrorState } from '@/components/ui/States';
 import { cn, fmtDuration, fmtMoney, fmtPct, fmtSignedMoney } from '@/lib/utils';
 import type { GameResult, KillCamReplay as KillCamReplayData, NearMiss } from '@/lib/types';
+import type { PublicMarketActorSummary } from '@/lib/game/actors/types';
 
 interface Data {
   result: GameResult;
@@ -27,6 +28,7 @@ interface Data {
   streak: { current: number; rankedResult: boolean; updated: boolean };
   nearMiss: NearMiss;
   regime: { id: string; version: number; name: string; description: string } | null;
+  marketActivity?: PublicMarketActorSummary | null;
   player: { username: string; avatarUrl?: string; title: string } | null;
 }
 
@@ -191,6 +193,31 @@ export function ResultView({ gameId }: { gameId: string }) {
                 ? `LIQUIDATED AT ${data.nearMiss.liquidationEquityPercent.toFixed(1)}% EQUITY`
                 : `YOU DROPPED TO ${data.nearMiss.minimumEquityPercent.toFixed(1)}% EQUITY`}
         </p>
+      )}
+
+      {/* Post-game Market Activity Reveal */}
+      {!isOnboarding && data.marketActivity && data.marketActivity.actors.length > 0 && (
+        <div className="ww-panel mt-3 p-4 sm:p-5 text-center">
+          <p className="ww-label">MARKET ACTIVITY · {data.marketActivity.actorCount} ACTORS</p>
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            {data.marketActivity.actors.map((actor, idx) => (
+              <div
+                key={idx}
+                className="rounded-lg border border-ww-border bg-ww-surface px-3 py-2 text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-display text-sm font-bold text-ww-text">{actor.name}</span>
+                  <span className="ww-mono text-[10px] font-semibold text-ww-win bg-ww-win/10 px-1.5 py-0.5 rounded">
+                    {actor.variantName}
+                  </span>
+                </div>
+                <p className="mt-1 font-sans text-xs text-ww-secondary max-w-[200px] leading-snug">
+                  {actor.role}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {data.achievements.newBadgeIds.length > 0 && (

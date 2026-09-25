@@ -71,6 +71,7 @@ export function finalizeLocked(
     ghostSourceGameId: game.ghostSourceGameId,
     regimeId: game.regimeId,
     regimeVersion: game.regimeVersion,
+    marketActorsVersion: game.marketActorsVersion,
     leverage: game.leverage ?? 10,
     rulesVersion: game.rulesVersion ?? 'v1',
     mode: game.mode,
